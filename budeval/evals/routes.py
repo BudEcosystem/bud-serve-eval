@@ -20,4 +20,13 @@ from fastapi import APIRouter
 
 logger = logging.get_logger(__name__)
 
-your_module_router = APIRouter(prefix="/your_route_prefix")
+evals_routes = APIRouter(prefix="/evals", tags=["Evals"])
+
+@evals_routes.get("/")
+async def test_eval():
+    """Test endpoint for evaluations.
+
+    Returns:
+        dict: A simple hello world message
+    """
+    return {"message": "Hello, World!"}

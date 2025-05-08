@@ -15,3 +15,5 @@ cachetools >= 5.4.0
 ansible-runner >= 2.4.1
 kubernetes >= 32.0.1
 ansible-core >= 2.18.5
+
+budmicroframe @ git+https://github.com/BudEcosystem/bud-microframe.git

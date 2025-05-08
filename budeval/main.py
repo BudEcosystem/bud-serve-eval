@@ -19,9 +19,9 @@
 from budmicroframe.main import configure_app
 
 from .commons.config import app_settings, secrets_settings
-from .evals.routes import your_module_router
+from .evals.routes import evals_routes
 
 
 app = configure_app(app_settings, secrets_settings)
 
-app.include_router(your_module_router)
+app.include_router(evals_routes)
