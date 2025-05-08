@@ -19,7 +19,7 @@
 from budmicroframe.main import configure_app
 
 from .commons.config import app_settings, secrets_settings
-from .your_module_name.routes import your_module_router
+from .evals.routes import your_module_router
 
 
 app = configure_app(app_settings, secrets_settings)
