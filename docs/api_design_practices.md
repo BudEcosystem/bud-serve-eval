@@ -9,7 +9,7 @@ how you can whip up a tasty API while following the best design practices.
 routers. All routes should be defined in separate modules as `APIRouter` endpoints following the folder structure laid
 out in the [Microservice Guidelines](./microservice_guidelines.md).
 
-Here’s a quick example of how to mount routers in `main.py` from the core package:
+Here's a quick example of how to mount routers in `main.py` from the core package:
 
 ```python
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ app.include_router(auth_router)
 app.include_router(dummy_router)
 ```
 
-If you’re curious about the nitty-gritty, check out
+If you're curious about the nitty-gritty, check out
 the [FastAPI docs](https://fastapi.tiangolo.com/reference/apirouter).
 
 ## 📦 Mandatory Routers: `sync_routes` and `meta_routes`
@@ -80,7 +80,7 @@ create a new class that extends `ResponseBase`:
 ### 🛠️ Example: Custom Response in `core/schemas.py`
 
 ```python
-from pyguard.commons.schemas import ResponseBase
+from budeval.commons.schemas import ResponseBase
 
 
 class CustomResponse(ResponseBase):
@@ -149,7 +149,7 @@ async def sync_configurations() -> Response:
 - **Modularize Your Code**: Break down complex logic into separate functions or modules to keep your routes clean and
   manageable. Follow the structure outlines in the Microservice Guidelines to keep everything organized and
   maintainable.
-- **Use Dependency Injection**: FastAPI’s dependency injection system is powerful—use it to manage configurations,
+- **Use Dependency Injection**: FastAPI's dependency injection system is powerful—use it to manage configurations,
   database connections, and other shared resources.
 - **Document Your APIs**: Make sure your endpoints are well-documented using description, summary, and tags. This helps
   keep your API user-friendly and self-explanatory.

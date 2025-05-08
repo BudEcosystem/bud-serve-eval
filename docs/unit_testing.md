@@ -1,6 +1,6 @@
 # 🧪 Unit Testing
 
-PyGuard recommends using [pytest](https://docs.pytest.org/en/stable/getting-started.html) for writing and running unit
+BudEval recommends using [pytest](https://docs.pytest.org/en/stable/getting-started.html) for writing and running unit
 tests. **pytest** is a robust testing framework that makes
 it easy to write simple and scalable test cases. Test-Driven Development (TDD) is preferred as it ensures that tests are
 written before the code is implemented, promoting better design and code quality.

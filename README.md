@@ -1,10 +1,10 @@
-# 🥷 PyGuard
+# 🥷 BudEval
 
 ---
 
-PyGuard is an all-in-one reference repository and documentation guide for maintaining high-quality Python projects. It
+BudEval is an all-in-one reference repository and documentation guide for maintaining high-quality Python projects. It
 provides a comprehensive suite of guidelines and configuration files for setting up hooks, writing and running tests,
-generating and maintaining documentation, and profiling your code for performance optimization. PyGuard is designed to
+generating and maintaining documentation, and profiling your code for performance optimization. BudEval is designed to
 streamline the development process, ensuring your codebase remains clean, efficient, and well-documented.
 
 ### 🔧 Features
@@ -21,7 +21,7 @@ streamline the development process, ensuring your codebase remains clean, effici
 - 📝 **Guidelines**: Established guidelines and best practices for Python project development to ensure consistency and
   quality, including how to use the provided configuration files.
 
-### ❓ Why PyGuard?
+### ❓ Why BudEval?
 
 - 🔄 **Consistency**: Enforce coding standards and practices across your team with configurable hooks and guidelines.
 - ✅ **Quality**: Maintain a high-quality codebase with automated testing, profiling, and detailed guidelines.

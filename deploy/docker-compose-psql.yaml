@@ -1,5 +1,5 @@
 services:
-  pyguard-postgres:
+  budeval-postgres:
     container_name: budserve-$NAMESPACE-$APP_NAME-postgres
     image: postgres:alpine
     ports:
@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: "${SECRETS_PSQL_PASSWORD:?SECRETS_PSQL_PASSWORD variable is not set}"
       POSTGRES_DB: "${PSQL_DB_NAME:?PSQL_DB_NAME variable is not set}"
     volumes:
-      - pyguard_postgres_data:/var/lib/postgresql/data
+      - budeval_postgres_data:/var/lib/postgresql/data
     command: [ "postgres", "-c", "fsync=off", "-p", "$PSQL_PORT" ]
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $PSQL_USER -p $PSQL_PORT" ]
@@ -17,10 +17,10 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - pyguard-network
+      - budeval-network
 volumes:
-  pyguard_postgres_data:
+  budeval_postgres_data:
 networks:
-  pyguard-network:
+  budeval-network:
     name: budserve-$NAMESPACE-$APP_NAME
     driver: bridge

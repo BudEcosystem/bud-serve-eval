@@ -41,13 +41,13 @@ without modifying the code or restarting the service, providing flexibility in d
 
 Configurations are stored in Redis, which is configured as a Dapr component in `.dapr/components/configstore.yaml`.
 
-- **When to Modify**: Typically, you won’t need to alter this configuration. However, if modifications are necessary,
+- **When to Modify**: Typically, you won't need to alter this configuration. However, if modifications are necessary,
   follow the guidelines in the Deployment section to ensure that changes are applied correctly, particularly if they are
   local environment-specific.
 - **What to Add**: Your config store can include anything from application-specific settings to feature flags.
   Centralized management of configurations simplifies updates and reduces the need for direct codebase changes. When you
   add an application specific config you will need to use the naming convention `<app name>.<key name>`. For example if
-  you want to add a config `debug` for app `pyguard` you need to set the key name as `pyguard.debug`.
+  you want to add a config `debug` for app `budeval` you need to set the key name as `budeval.debug`.
 
 ### 🔄 Syncing Configs: The Best of Both Worlds
 
@@ -74,10 +74,10 @@ debug: Optional[bool] = Field(
 
 ### 📝 Usage Example
 
-To access configurations, simply import `app_settings` from `pyguard.commons.config` and integrate it into your logic:
+To access configurations, simply import `app_settings` from `budeval.commons.config` and integrate it into your logic:
 
 ```python
-from pyguard.commons.config import app_settings
+from budeval.commons.config import app_settings
 
 # Your logic here
 if app_settings.env == "dev":
@@ -171,10 +171,10 @@ official [Dapr documentation](https://docs.dapr.io/developing-applications/build
 
 ### 📝 Usage Example
 
-To access secrets, simply import `secrets_settings` from `pyguard.commons.config` and integrate it into your logic:
+To access secrets, simply import `secrets_settings` from `budeval.commons.config` and integrate it into your logic:
 
 ```python
-from pyguard.commons.config import secrets_settings
+from budeval.commons.config import secrets_settings
 
 # Your logic here
 if secrets_settings.budserve_url == "dev":

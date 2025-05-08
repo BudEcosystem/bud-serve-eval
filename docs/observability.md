@@ -12,7 +12,7 @@ microservices are as transparent and predictable as possible.
 ## 🛠️ Logging: Best Practices for Observability
 
 **Logging** is the first step in making your microservices observable. Properly configured logs allow you to track the
-flow of execution, diagnose issues, and monitor the performance of your application in real-time. Let’s dive into the
+flow of execution, diagnose issues, and monitor the performance of your application in real-time. Let's dive into the
 best practices for logging to ensure your services are as observable as they are resilient.
 
 ### 🚀 Getting Started with Logging
@@ -23,7 +23,7 @@ logging needs, ensuring that your logs are consistent, structured, and easy to m
 To get started with logging in any file, simply import and set up your logger like this:
 
 ```python
-from pyguard.commons import logging
+from budeval.commons import logging
 
 logger = logging.get_logger(__name__)
 ```
@@ -63,13 +63,13 @@ This distinction helps in maintaining clarity in your logs, making it easier to 
 
 ### ⚡ Async Logging: When Speed Matters
 
-The logger you’re using supports asynchronous logging, which is particularly useful in high-traffic parts of your code.
+The logger you're using supports asynchronous logging, which is particularly useful in high-traffic parts of your code.
 Async logging ensures that your application remains responsive even when logging large volumes of data.
 
 **Example**:
 
 ```python
-from pyguard.commons import logging
+from budeval.commons import logging
 
 logger = logging.get_logger(__name__)
 

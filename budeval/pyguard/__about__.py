@@ -16,4 +16,4 @@
 
 """Contains metadata about the package, including version information and author details."""
 
-__version__ = "pyguard@0.0.1"
+__version__ = "budeval@0.0.1"
