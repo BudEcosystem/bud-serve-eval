@@ -15,18 +15,32 @@
 #  -----------------------------------------------------------------------------
 
 from budmicroframe.commons import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+
+from budeval.evals.services import EvaluationService
+
+from .schemas import EvaluationRequest
 
 
 logger = logging.get_logger(__name__)
 
 evals_routes = APIRouter(prefix="/evals", tags=["Evals"])
 
-@evals_routes.get("/")
-async def test_eval():
-    """Test endpoint for evaluations.
+@evals_routes.post("/start")
+async def start_eval(request: EvaluationRequest):
+    """Start an evaluation.
+
+    Args:
+        request (EvaluationRequest): The evaluation request.
 
     Returns:
         dict: A simple hello world message
     """
-    return {"message": "Hello, World!"}
+    try:
+        response = await EvaluationService().evaluate_model(request)
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save evaluation request: {str(e)}"
+        ) from e
