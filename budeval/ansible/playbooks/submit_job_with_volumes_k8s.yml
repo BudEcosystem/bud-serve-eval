@@ -1,0 +1,102 @@
+---
+- name: Deploy Kubernetes Job with Persistent Volumes
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  collections:
+    - community.kubernetes
+
+  tasks:
+    - name: Ensure namespace exists
+      community.kubernetes.k8s:
+        name: "{{ namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+
+    - name: Create data persistent volume
+      community.kubernetes.k8s:
+        state: present
+        definition: "{{ lookup('file', pv_data_template_path) | from_yaml }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+
+    - name: Create output persistent volume
+      community.kubernetes.k8s:
+        state: present
+        definition: "{{ lookup('file', pv_output_template_path) | from_yaml }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+
+    - name: Create data persistent volume claim
+      community.kubernetes.k8s:
+        state: present
+        definition: "{{ lookup('file', pvc_data_template_path) | from_yaml }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ namespace }}"
+
+    - name: Create output persistent volume claim
+      community.kubernetes.k8s:
+        state: present
+        definition: "{{ lookup('file', pvc_output_template_path) | from_yaml }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ namespace }}"
+
+    - name: Wait for data PVC to be bound
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ job_name }}-data-pvc"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: data_pvc_result
+      until: data_pvc_result.resources | length > 0 and data_pvc_result.resources[0].status.phase == "Bound"
+      retries: 30
+      delay: 10
+
+    - name: Wait for output PVC to be bound
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ job_name }}-output-pvc"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: output_pvc_result
+      until: output_pvc_result.resources | length > 0 and output_pvc_result.resources[0].status.phase == "Bound"
+      retries: 30
+      delay: 10
+
+    - name: Deploy evaluation job
+      community.kubernetes.k8s:
+        state: present
+        definition: "{{ lookup('file', job_template_path) | from_yaml }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ namespace }}"
+
+    - name: Verify job was created
+      community.kubernetes.k8s_info:
+        api_version: batch/v1
+        kind: Job
+        name: "{{ job_name }}"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: job_creation_result
+      until: job_creation_result.resources | length > 0
+      retries: 10
+      delay: 3
+
+    - name: Get job status
+      community.kubernetes.k8s_info:
+        api_version: batch/v1
+        kind: Job
+        name: "{{ job_name }}"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: job_status
+
+    - name: Display job information
+      debug:
+        msg: |
+          Job {{ job_name }} has been deployed successfully.
+          Status: {{ job_status.resources[0].status | default('Unknown') }}
+          Data Volume: {{ job_name }}-data-pvc mounted at /data
+          Output Volume: {{ job_name }}-output-pvc mounted at /output 

@@ -144,6 +144,52 @@ class EvaluationWorkflow:
             )
         return response.model_dump(mode="json")
 
+    @dapr_workflows.register_activity
+    @staticmethod
+    def monitor_eval_job_progress(
+        ctx: wf.WorkflowActivityContext,
+        monitor_request: str,
+    ) -> dict:
+        """Monitor the evaluation job progress.
+
+        Args:
+            ctx (WorkflowActivityContext): The context of the Dapr workflow, providing
+                access to workflow instance information.
+            monitor_request (str): A JSON string containing the monitoring request parameters
+                including job_id, kubeconfig, and namespace.
+        """
+        logger = logging.getLogger("::EVAL:: Monitor Job Progress")
+        logger.debug(f"Monitoring job progress for {monitor_request}")
+
+        workflow_id = ctx.workflow_id
+        task_id = ctx.task_id
+
+        monitor_request_json = json.loads(monitor_request)
+        job_id = monitor_request_json["job_id"]
+        kubeconfig = monitor_request_json["kubeconfig"]
+        namespace = monitor_request_json.get("namespace", "budeval")
+
+        response: Union[SuccessResponse, ErrorResponse]
+        try:
+            job_status = asyncio.run(
+                EvaluationOpsService.get_job_status(
+                    job_id, kubeconfig, namespace
+                )
+            )
+
+            logger.debug(f"Job status for {job_id}: {job_status}")
+
+            response = SuccessResponse(
+                message="Job status retrieved successfully",
+                param=job_status
+            )
+        except Exception as e:
+            logger.error(f"Error monitoring job progress: {e}", exc_info=True)
+            response = ErrorResponse(
+                message="Error monitoring job progress",
+                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+            )
+        return response.model_dump(mode="json")
 
     @dapr_workflows.register_workflow
     @staticmethod
@@ -211,10 +257,10 @@ class EvaluationWorkflow:
 
         # Set initial ETA
         notification_req.payload.event = "eta"
-        eta_minutes = 10
+        eta_minutes = 30
         notification_req.payload.content = NotificationContent(
             title="Estimated time to completion",
-            message=f"{eta_minutes*10}",
+            message=f"{eta_minutes} minutes",
             status=WorkflowStatus.RUNNING,
         )
         dapr_workflows.publish_notification(
@@ -269,7 +315,7 @@ class EvaluationWorkflow:
         notification_req.payload.event = "eta"
         notification_req.payload.content = NotificationContent(
             title="Estimated time to completion",
-            message=f"{2*10}",
+            message=f"{25} minutes",
             status=WorkflowStatus.RUNNING,
         )
         dapr_workflows.publish_notification(
@@ -319,19 +365,168 @@ class EvaluationWorkflow:
         )
 
         # Monitor Evaluation Job Progress
+        logger.info("Starting job monitoring")
+        
+        # Extract job details from deployment result
+        job_details = deploy_eval_job_result.get("param", {})
+        job_id = job_details.get("job_id")
+        
+        if not job_id:
+            logger.error("No job_id found in deployment result")
+            notification_req.payload.event = "monitor_eval_job_progress"
+            notification_req.payload.content = NotificationContent(
+                title="Job monitoring failed",
+                message="No job ID found to monitor",
+                status=WorkflowStatus.FAILED,
+            )
+            dapr_workflows.publish_notification(
+                workflow_id=instance_id,
+                notification=notification_req,
+                target_topic_name=evaluate_model_request_json.source_topic,
+                target_name=evaluate_model_request_json.source,
+            )
+            return
 
+        # Prepare monitoring request
+        monitor_request = {
+            "job_id": job_id,
+            "kubeconfig": evaluate_model_request_json.kubeconfig,
+            "namespace": "budeval"
+        }
 
+        # Monitor job until completion
+        max_monitoring_attempts = 360  # 30 minutes with 5-second intervals
+        monitoring_attempt = 0
+        job_completed = False
+        final_job_status = None
 
+        while monitoring_attempt < max_monitoring_attempts and not job_completed:
+            monitoring_attempt += 1
+            
+            # Wait before checking status (except for first attempt)
+            if monitoring_attempt > 1:
+                yield ctx.create_timer(timedelta(seconds=5))
+            
+            # Check job status
+            monitor_result = yield ctx.call_activity(
+                EvaluationWorkflow.monitor_eval_job_progress,
+                input=json.dumps(monitor_request),
+            )
 
+            logger.debug(f"Monitor attempt {monitoring_attempt}: {monitor_result}")
+
+            if monitor_result.get("code", HTTPStatus.OK.value) != HTTPStatus.OK.value:
+                logger.warning(f"Monitoring attempt {monitoring_attempt} failed: {monitor_result.get('message')}")
+                continue
+
+            job_status_data = monitor_result.get("param", {})
+            job_status = job_status_data.get("status", "unknown")
+            job_details_info = job_status_data.get("details", {})
+            
+            # Check if job is completed (succeeded or failed)
+            if job_status in ["completed", "succeeded", "failed", "error"]:
+                job_completed = True
+                final_job_status = job_status_data
+                logger.info(f"Job {job_id} completed with status: {job_status}")
+                break
+            
+            # Check Kubernetes job status from details
+            if job_details_info:
+                succeeded = job_details_info.get("succeeded", 0)
+                failed = job_details_info.get("failed", 0)
+                
+                if succeeded > 0:
+                    job_completed = True
+                    final_job_status = job_status_data
+                    final_job_status["status"] = "succeeded"
+                    logger.info(f"Job {job_id} succeeded")
+                    break
+                elif failed > 0:
+                    job_completed = True
+                    final_job_status = job_status_data
+                    final_job_status["status"] = "failed"
+                    logger.info(f"Job {job_id} failed")
+                    break
+
+            # Publish progress notification every 10 attempts (50 seconds)
+            if monitoring_attempt % 10 == 0:
+                notification_req.payload.event = "monitor_eval_job_progress"
+                notification_req.payload.content = NotificationContent(
+                    title="Job monitoring in progress",
+                    message=f"Job {job_id} is still running. Status: {job_status}. Attempt: {monitoring_attempt}/{max_monitoring_attempts}",
+                    status=WorkflowStatus.RUNNING,
+                )
+                dapr_workflows.publish_notification(
+                    workflow_id=instance_id,
+                    notification=notification_req,
+                    target_topic_name=evaluate_model_request_json.source_topic,
+                    target_name=evaluate_model_request_json.source,
+                )
+
+        # Handle monitoring completion
+        if job_completed and final_job_status:
+            final_status = final_job_status.get("status", "unknown")
+            
+            if final_status in ["succeeded", "completed"]:
+                # Job succeeded
+                notification_req.payload.event = "monitor_eval_job_progress"
+                notification_req.payload.content = NotificationContent(
+                    title="Job monitoring completed - Success",
+                    message=f"Job {job_id} completed successfully",
+                    status=WorkflowStatus.COMPLETED,
+                )
+                dapr_workflows.publish_notification(
+                    workflow_id=instance_id,
+                    notification=notification_req,
+                    target_topic_name=evaluate_model_request_json.source_topic,
+                    target_name=evaluate_model_request_json.source,
+                )
+            else:
+                # Job failed
+                notification_req.payload.event = "monitor_eval_job_progress"
+                notification_req.payload.content = NotificationContent(
+                    title="Job monitoring completed - Failed",
+                    message=f"Job {job_id} failed with status: {final_status}",
+                    status=WorkflowStatus.FAILED,
+                )
+                dapr_workflows.publish_notification(
+                    workflow_id=instance_id,
+                    notification=notification_req,
+                    target_topic_name=evaluate_model_request_json.source_topic,
+                    target_name=evaluate_model_request_json.source,
+                )
+                return  # Exit workflow on failure
+        else:
+            # Monitoring timed out
+            logger.error(f"Job monitoring timed out after {max_monitoring_attempts} attempts")
+            notification_req.payload.event = "monitor_eval_job_progress"
+            notification_req.payload.content = NotificationContent(
+                title="Job monitoring timed out",
+                message=f"Job {job_id} monitoring timed out after {max_monitoring_attempts} attempts",
+                status=WorkflowStatus.FAILED,
+            )
+            dapr_workflows.publish_notification(
+                workflow_id=instance_id,
+                notification=notification_req,
+                target_topic_name=evaluate_model_request_json.source_topic,
+                target_name=evaluate_model_request_json.source,
+            )
+            return  # Exit workflow on timeout
 
         # END OF WORKFLOW WITH NOTIFICATIONS
         # Result
         notification_req.payload.event = "results"
+        
+        # Include actual job results if available
+        job_results = {"job_id": job_id}
+        if final_job_status:
+            job_results.update(final_job_status)
+        
         notification_req.payload.content = NotificationContent(
             title="Model evaluation successful",
             message="Model evaluation completed successfully",
             status=WorkflowStatus.COMPLETED,
-            result= {"dummy_key": "dummy_value"}
+            result=job_results
         )
         workflow_status = check_workflow_status_in_statestore(instance_id)
         if workflow_status:
@@ -387,7 +582,7 @@ class EvaluationWorkflow:
             ),
         ]
 
-        eta = 30 * 5  # Estimate should be dynamic
+        eta = 30 * 60  # 30 minutes estimate for evaluation jobs
         # Schedule the workflow
         response = await dapr_workflows.schedule_workflow(
             workflow_name="evaluate_model",

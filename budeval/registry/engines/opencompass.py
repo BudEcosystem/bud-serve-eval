@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 class OpenCompassEngine:
     """OpenCompass engine for LLM evaluation and benchmarking."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any] = None):
         """Initialize OpenCompassEngine with configuration.
 
         Args:
             config: Dictionary containing configuration parameters
         """
-        self.config = config
+        self.config = config or {}
         self._initialized = False
 
     def initialize(self) -> None:
