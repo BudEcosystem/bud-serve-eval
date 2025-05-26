@@ -1,6 +1,7 @@
 from budmicroframe.commons.logging import logging
 
 from budeval.evals.base import BaseClusterHandler
+from budeval.evals.schemas import StartEvaluationRequest
 from budeval.registry.orchestrator.ansible_orchestrator import AnsibleOrchestrator
 
 
@@ -20,11 +21,11 @@ class KubernetesClusterHandler(BaseClusterHandler):
             logger.error(f"Error verifying cluster connection: {e}")
             return False
 
-    def evaluate_model(self, kubeconfig: str) -> bool:
+    def evaluate_model(self, evaluate_model_request: StartEvaluationRequest) -> bool:
         """Evaluate model."""
         try:
             ansible_runner = AnsibleOrchestrator()
-            #return ansible_runner.evaluate_model(kubeconfig)
+            return ansible_runner.evaluate_model(evaluate_model_request)
         except Exception as e:
             logger.error(f"Error evaluating model: {e}")
             return False

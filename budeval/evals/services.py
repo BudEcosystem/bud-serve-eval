@@ -2,10 +2,9 @@ from typing import Union
 
 from budmicroframe.commons.schemas import ErrorResponse, WorkflowMetadataResponse
 
-from budeval.commons.base_crud import SessionMixin
 from budeval.commons.logging import logging
 from budeval.evals.kubernetes import KubernetesClusterHandler
-from budeval.evals.schemas import StartEvaluationRequest
+from budeval.evals.schemas import DeployEvalJobRequest, StartEvaluationRequest
 
 
 logger = logging.getLogger(__name__)
@@ -22,15 +21,15 @@ class EvaluationOpsService:
         logger.info(f"Verifying cluster connection for workflow_id: {workflow_id} and task_id: {task_id}")
         k8_handler = KubernetesClusterHandler()
         return k8_handler.verify_cluster_connection(verify_cluster_connection_request.kubeconfig)
-    
+
     @classmethod
-    async def evaluate_model(
-        cls, evaluate_model_request: StartEvaluationRequest, task_id: str, workflow_id: str
-    ):
+    async def deploy_eval_job(
+        cls, evaluate_model_request: DeployEvalJobRequest, task_id: str, workflow_id: str
+    ) -> dict:
         """Evaluate model."""
         logger.info(f"Evaluating model for workflow_id: {workflow_id} and task_id: {task_id}")
         # TODO: Implement model evaluation
-        return
+        return {"job_id": "1234567890"} # TODO: Implement
 
 class EvaluationService:
     """Service for evaluation."""
