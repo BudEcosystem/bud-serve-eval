@@ -1,0 +1,3 @@
+ansible-playbook   -i inventory/hosts   project/verify_cluster_k8s.yml   --extra-vars '{"kubeconfig_path":"/tmp/ansible_verify-d4402fba0b364cfe9b687adcb2e978ea_i70url4g/verify-d4402fba0b364cfe9b687adcb2e978ea_kubeconfig.yaml"}'
+
+export ANSIBLE_PYTHON_INTERPRETER=/home/ubuntu/bud-serve-eval/.venv/bin/python

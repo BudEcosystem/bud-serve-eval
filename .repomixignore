@@ -1,0 +1,16 @@
+# Add patterns to ignore here, one per line
+# Example:
+# *.log
+# tmp/
+.dapr/
+alembic/
+.venv/
+deploy/
+docs/
+logs/
+scripts/
+tests/
+*.yaml
+.repomixignore
+.txt
+.xml

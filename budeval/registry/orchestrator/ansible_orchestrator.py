@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 import shutil
 import tempfile
 import uuid
@@ -12,6 +13,8 @@ import yaml
 from budeval.commons.logging import logging
 
 logger = logging.getLogger(__name__)
+
+# add export ANSIBLE_PYTHON_INTERPRETER=/home/ubuntu/bud-serve-eval/.venv/bin/python to sys.executable
 
 
 class AnsibleOrchestrator:
@@ -32,23 +35,38 @@ class AnsibleOrchestrator:
         if not self._playbook_dir.exists():
             raise FileNotFoundError(f"Ansible playbook directory not found: {self._playbook_dir}")
 
-    def verify_cluster_connection(self, kubeconfig: str) -> bool:
+    def verify_cluster_connection(self, kubeconfig: Optional[str] = None) -> bool:
         """Verify cluster connection using an Ansible playbook via a kubeconfig in JSON form."""
         temp_id = f"verify-{uuid.uuid4().hex}"
         playbook = "verify_cluster_k8s.yml"
 
-        # 1) Parse the incoming JSON string into a Python dict
-        kubeconfig_dict = json.loads(kubeconfig)
+        files = {}
+        extravars = {}
+        
+        # For Testing: Load from local yaml file if no kubeconfig provided
+        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+            # Read the local k3s.yaml file
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+                kubeconfig_yaml_content = f.read()
+            # Since it's already YAML, we don't need to parse/convert it
+            files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml_content}
+            extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+        elif kubeconfig:
+            # 1) Parse the incoming JSON string into a Python dict
+            kubeconfig_dict = json.loads(kubeconfig)
 
-        # 2) Dump that dict out as YAML
-        kubeconfig_yaml = yaml.safe_dump(
-            kubeconfig_dict,
-            sort_keys=False,
-            default_flow_style=False
-        )
+            # 2) Dump that dict out as YAML
+            kubeconfig_yaml = yaml.safe_dump(
+                kubeconfig_dict,
+                sort_keys=False,
+                default_flow_style=False
+            )
 
-        files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml}
-        extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+            files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml}
+            extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+        else:
+            # Use in-cluster config - don't pass kubeconfig_path
+            extravars = {"use_in_cluster_config": True}
 
         try:
             self._run_ansible_playbook(playbook, temp_id, files, extravars)
@@ -62,7 +80,7 @@ class AnsibleOrchestrator:
         self,
         runner_type: str,
         uuid: str,
-        kubeconfig: str,
+        kubeconfig: Optional[str],
         engine_args: Dict[str, Any],
         docker_image: str,
         namespace: str = "budeval",
@@ -73,7 +91,7 @@ class AnsibleOrchestrator:
         Args:
             runner_type: Type of runner to use (e.g., "kubernetes").
             uuid: Unique identifier for the job.
-            kubeconfig: Kubernetes configuration as a string.
+            kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
             engine_args: Arguments to pass to the engine.
             docker_image: Docker image to use for the job.
             namespace: Kubernetes namespace to deploy the job in. Defaults to "budeval".
@@ -92,15 +110,27 @@ class AnsibleOrchestrator:
         job_yaml = self._render_job_yaml(uuid, docker_image, engine_args, namespace, ttl_seconds)
 
         files = {
-            f"{uuid}_kubeconfig.yaml": kubeconfig,
             "job.yaml": job_yaml,
         }
         extravars = {
             "job_name": uuid,
-            "kubeconfig_path": f"{uuid}_kubeconfig.yaml",
             "job_template_path": "job.yaml",
             "namespace": namespace,
         }
+        
+        if kubeconfig:
+            # Parse and convert kubeconfig if provided
+            kubeconfig_dict = json.loads(kubeconfig)
+            kubeconfig_yaml = yaml.safe_dump(
+                kubeconfig_dict,
+                sort_keys=False,
+                default_flow_style=False
+            )
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        else:
+            # Use in-cluster config
+            extravars["use_in_cluster_config"] = True
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
@@ -108,7 +138,7 @@ class AnsibleOrchestrator:
         self,
         runner_type: str,
         uuid: str,
-        kubeconfig: str,
+        kubeconfig: Optional[str],
         engine_args: Dict[str, Any],
         docker_image: str,
         namespace: str = "budeval",
@@ -121,7 +151,7 @@ class AnsibleOrchestrator:
         Args:
             runner_type: Type of runner to use (e.g., "kubernetes").
             uuid: Unique identifier for the job.
-            kubeconfig: Kubernetes configuration as a string.
+            kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
             engine_args: Arguments to pass to the engine.
             docker_image: Docker image to use for the job.
             namespace: Kubernetes namespace to deploy the job in. Defaults to "budeval".
@@ -139,59 +169,96 @@ class AnsibleOrchestrator:
         if not playbook:
             raise ValueError(f"Unsupported runner_type: {runner_type}")
 
-        # Generate YAML manifests
-        pv_data_yaml = self._render_persistent_volume_yaml(f"{uuid}-data-pv", data_volume_size, "data")
-        pvc_data_yaml = self._render_persistent_volume_claim_yaml(f"{uuid}-data-pvc", f"{uuid}-data-pv", data_volume_size, namespace)
-        
-        pv_output_yaml = self._render_persistent_volume_yaml(f"{uuid}-output-pv", output_volume_size, "output")
-        pvc_output_yaml = self._render_persistent_volume_claim_yaml(f"{uuid}-output-pvc", f"{uuid}-output-pv", output_volume_size, namespace)
-        
-        job_yaml = self._render_job_with_volumes_yaml(uuid, docker_image, engine_args, namespace, ttl_seconds)
+        # Generate YAML manifests for PVCs and Job (dynamic provisioning via PVCs)
+        pvc_data_yaml = self._render_persistent_volume_claim_yaml(
+            f"{uuid}-data-pvc", f"{uuid}-data-pv", data_volume_size, namespace
+        )
+        pvc_output_yaml = self._render_persistent_volume_claim_yaml(
+            f"{uuid}-output-pvc", f"{uuid}-output-pv", output_volume_size, namespace
+        )
+        job_yaml = self._render_job_with_volumes_yaml(
+            uuid, docker_image, engine_args, namespace, ttl_seconds
+        )
 
         files = {
-            f"{uuid}_kubeconfig.yaml": kubeconfig,
-            "pv-data.yaml": pv_data_yaml,
             "pvc-data.yaml": pvc_data_yaml,
-            "pv-output.yaml": pv_output_yaml,
             "pvc-output.yaml": pvc_output_yaml,
             "job.yaml": job_yaml,
         }
         extravars = {
             "job_name": uuid,
-            "kubeconfig_path": f"{uuid}_kubeconfig.yaml",
-            "pv_data_template_path": "pv-data.yaml",
             "pvc_data_template_path": "pvc-data.yaml",
-            "pv_output_template_path": "pv-output.yaml",
             "pvc_output_template_path": "pvc-output.yaml",
             "job_template_path": "job.yaml",
             "namespace": namespace,
         }
+        
+        # For Testing: Load from local yaml file if no kubeconfig provided
+        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+            # Read the local k3s.yaml file
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+                kubeconfig_yaml_content = f.read()
+            # Since it's already YAML, we don't need to parse/convert it
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        elif kubeconfig:
+            # Parse and convert kubeconfig if provided
+            kubeconfig_dict = json.loads(kubeconfig)
+            kubeconfig_yaml = yaml.safe_dump(
+                kubeconfig_dict,
+                sort_keys=False,
+                default_flow_style=False
+            )
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        else:
+            # Use in-cluster config
+            extravars["use_in_cluster_config"] = True
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
     def cleanup_job_resources(
         self,
         uuid: str,
-        kubeconfig: str,
+        kubeconfig: Optional[str],
         namespace: str = "budeval",
     ):
         """Clean up job resources including volumes.
 
         Args:
             uuid: Unique identifier for the job.
-            kubeconfig: Kubernetes configuration as a string.
+            kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
             namespace: Kubernetes namespace. Defaults to "budeval".
         """
         playbook = "cleanup_job_resources_k8s.yml"
         
-        files = {
-            f"{uuid}_kubeconfig.yaml": kubeconfig,
-        }
+        files = {}
         extravars = {
             "job_name": uuid,
-            "kubeconfig_path": f"{uuid}_kubeconfig.yaml",
             "namespace": namespace,
         }
+        
+        # For Testing: Load from local yaml file if no kubeconfig provided
+        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+            # Read the local k3s.yaml file
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+                kubeconfig_yaml_content = f.read()
+            # Since it's already YAML, we don't need to parse/convert it
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        elif kubeconfig:
+            # Parse and convert kubeconfig if provided
+            kubeconfig_dict = json.loads(kubeconfig)
+            kubeconfig_yaml = yaml.safe_dump(
+                kubeconfig_dict,
+                sort_keys=False,
+                default_flow_style=False
+            )
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        else:
+            # Use in-cluster config
+            extravars["use_in_cluster_config"] = True
 
         try:
             self._run_ansible_playbook(playbook, uuid, files, extravars)
@@ -203,14 +270,14 @@ class AnsibleOrchestrator:
     def get_job_status(
         self,
         uuid: str,
-        kubeconfig: str,
+        kubeconfig: Optional[str],
         namespace: str = "budeval",
     ) -> dict:
         """Get job status.
 
         Args:
             uuid: Unique identifier for the job.
-            kubeconfig: Kubernetes configuration as a string.
+            kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
             namespace: Kubernetes namespace. Defaults to "budeval".
 
         Returns:
@@ -218,14 +285,33 @@ class AnsibleOrchestrator:
         """
         playbook = "get_job_status_k8s.yml"
         
-        files = {
-            f"{uuid}_kubeconfig.yaml": kubeconfig,
-        }
+        files = {}
         extravars = {
             "job_name": uuid,
-            "kubeconfig_path": f"{uuid}_kubeconfig.yaml",
             "namespace": namespace,
         }
+        
+        # For Testing: Load from local yaml file if no kubeconfig provided
+        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+            # Read the local k3s.yaml file
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+                kubeconfig_yaml_content = f.read()
+            # Since it's already YAML, we don't need to parse/convert it
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        elif kubeconfig:
+            # Parse and convert kubeconfig if provided
+            kubeconfig_dict = json.loads(kubeconfig)
+            kubeconfig_yaml = yaml.safe_dump(
+                kubeconfig_dict,
+                sort_keys=False,
+                default_flow_style=False
+            )
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        else:
+            # Use in-cluster config
+            extravars["use_in_cluster_config"] = True
 
         try:
             result = self._run_ansible_playbook_with_output(playbook, uuid, files, extravars)
@@ -293,12 +379,17 @@ class AnsibleOrchestrator:
             extravars["pvc_output_template_path"] = str(pdir / extravars["pvc_output_template_path"])
 
         # Environment vars for ansible-runner
+        venv_bin = os.path.dirname(sys.executable)
+        current_path = os.environ.get('PATH', '')
         envvars = {
             "ANSIBLE_PYTHON_INTERPRETER": sys.executable,
             "ANSIBLE_HOST_KEY_CHECKING": "False",
+            "PATH": f"{venv_bin}:{current_path}",
         }
 
         logger.info(f"Running Ansible playbook: {playbook} with extravars: {extravars}")
+        logger.info(f"Using Python interpreter: {sys.executable}")
+        logger.info(f"PATH environment: {envvars['PATH']}")
         
         res = ansible_runner.run(
             private_data_dir=str(pdir),
@@ -366,12 +457,17 @@ class AnsibleOrchestrator:
             extravars["pvc_output_template_path"] = str(pdir / extravars["pvc_output_template_path"])
 
         # Environment vars for ansible-runner
+        venv_bin = os.path.dirname(sys.executable)
+        current_path = os.environ.get('PATH', '')
         envvars = {
             "ANSIBLE_PYTHON_INTERPRETER": sys.executable,
             "ANSIBLE_HOST_KEY_CHECKING": "False",
+            "PATH": f"{venv_bin}:{current_path}",
         }
 
         logger.info(f"Running Ansible playbook: {playbook} with extravars: {extravars}")
+        logger.info(f"Using Python interpreter: {sys.executable}")
+        logger.info(f"PATH environment: {envvars['PATH']}")
         
         res = ansible_runner.run(
             private_data_dir=str(pdir),
@@ -484,8 +580,8 @@ spec:
 """
 
     def _render_persistent_volume_yaml(self, name: str, size: str, volume_type: str) -> str:
-        # Use hostPath for local development, but this should be configurable for production
-        host_path = f"/tmp/budeval-volumes/{name}"
+        # Note: This creates a PV without hostPath
+        # The actual storage backend depends on your cluster configuration
         return f"""apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -500,12 +596,20 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
-  hostPath:
-    path: {host_path}
-    type: DirectoryOrCreate
+  # Storage provisioner will handle the actual storage backend
+  # No hostPath specified
 """
 
-    def _render_persistent_volume_claim_yaml(self, name: str, pv_name: str, size: str, namespace: str) -> str:
+    def _render_persistent_volume_claim_yaml(
+        self, name: str, pv_name: str, size: str, namespace: str
+    ) -> str:
+        # Render a PVC using environment-aware configuration for job-specific volumes
+        from budeval.commons.storage_config import StorageConfig
+
+        job_cfg = StorageConfig.get_job_volumes_config()
+        access_mode = job_cfg.get("access_mode", "ReadWriteOnce")
+        storage_class = job_cfg.get("storage_class", "")
+
         return f"""apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -515,12 +619,11 @@ metadata:
     app: budeval
 spec:
   accessModes:
-    - ReadWriteOnce
-  storageClassName: manual
+    - {access_mode}
+{f'  storageClassName: {storage_class}' if storage_class else ''}
   resources:
     requests:
       storage: {size}
-  volumeName: {pv_name}
 """
 
     def _render_job_with_volumes_yaml(self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int) -> str:
@@ -545,6 +648,9 @@ spec:
               mountPath: /data
             - name: output-volume
               mountPath: /output
+            - name: eval-datasets
+              mountPath: /datasets
+              readOnly: true
           workingDir: /workspace
       volumes:
         - name: data-volume
@@ -553,6 +659,11 @@ spec:
         - name: output-volume
           persistentVolumeClaim:
             claimName: {uuid}-output-pvc
+        - name: eval-datasets
+          persistentVolumeClaim:
+            claimName: eval-datasets-pvc
+            # Note: This PVC must exist in the same namespace as the job
+            # The eval-datasets PVC should be created in the job's namespace
       restartPolicy: Never
   backoffLimit: 1
 """

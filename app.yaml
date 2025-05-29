@@ -1,0 +1,26 @@
+version: 1
+common:
+  resourcesPath: "/home/ubuntu/bud-eval/.dapr/components"
+  configFilePath: "/home/ubuntu/bud-eval/.dapr/dapr_config.yaml"
+  env:
+    DEBUG: true
+apps:
+  - appID: budeval
+    appDirPath: .
+    appProtocol: http
+    daprHTTPPort: 3511
+    appPort: 8099
+    resourcesPaths:
+      - .dapr/components
+    command:
+      - "/home/ubuntu/bud-serve-eval/.venv/bin/python"
+      - "-m"
+      - "uvicorn"
+      - "budeval.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8099"
+      - "--reload"
+    appLogDestination: file
+    daprdLogDestination: file

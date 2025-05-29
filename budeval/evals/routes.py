@@ -15,7 +15,8 @@
 #  -----------------------------------------------------------------------------
 
 from budmicroframe.commons import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
 
 from budeval.evals.services import EvaluationService, EvaluationOpsService
 
@@ -37,6 +38,11 @@ async def start_eval(request: EvaluationRequest):
         dict: A simple hello world message
     """
     try:
+        from budeval.evals.volume_init import VolumeInitializer
+
+        volume_init = VolumeInitializer()
+        await volume_init.ensure_eval_datasets_volume()
+
         response = await EvaluationService().evaluate_model(request)
         return response
     except Exception as e:
@@ -46,12 +52,12 @@ async def start_eval(request: EvaluationRequest):
         ) from e
 
 @evals_routes.get("/status/{job_id}")
-async def get_job_status(job_id: str, kubeconfig: str):
+async def get_job_status(job_id: str, kubeconfig: Optional[str] = Query(None, description="Kubernetes configuration as JSON string (optional)")):
     """Get the status of an evaluation job.
 
     Args:
         job_id (str): The unique identifier of the job.
-        kubeconfig (str): Kubernetes configuration as JSON string.
+        kubeconfig (Optional[str]): Kubernetes configuration as JSON string (optional, uses in-cluster config if not provided).
 
     Returns:
         dict: Job status information
@@ -66,12 +72,12 @@ async def get_job_status(job_id: str, kubeconfig: str):
         ) from e
 
 @evals_routes.delete("/cleanup/{job_id}")
-async def cleanup_job(job_id: str, kubeconfig: str):
+async def cleanup_job(job_id: str, kubeconfig: Optional[str] = Query(None, description="Kubernetes configuration as JSON string (optional)")):
     """Clean up an evaluation job and its resources.
 
     Args:
         job_id (str): The unique identifier of the job.
-        kubeconfig (str): Kubernetes configuration as JSON string.
+        kubeconfig (Optional[str]): Kubernetes configuration as JSON string (optional, uses in-cluster config if not provided).
 
     Returns:
         dict: Cleanup status information
@@ -83,6 +89,23 @@ async def cleanup_job(job_id: str, kubeconfig: str):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to cleanup job: {str(e)}"
+        ) from e
+
+@evals_routes.post("/init-volume")
+async def init_volume():
+    """Manually initialize the eval-datasets volume."""
+    try:
+        from budeval.evals.volume_init import VolumeInitializer
+        
+        volume_init = VolumeInitializer()
+        await volume_init.ensure_eval_datasets_volume()
+        
+        return {"status": "success", "message": "Volume initialization completed"}
+    except Exception as e:
+        logger.error(f"Failed to initialize volume: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize volume: {str(e)}"
         ) from e
 
 @evals_routes.post("/test-deploy")

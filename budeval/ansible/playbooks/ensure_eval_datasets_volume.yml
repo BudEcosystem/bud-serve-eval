@@ -1,0 +1,126 @@
+---
+- name: Ensure eval-datasets volume exists
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  collections:
+    - community.kubernetes
+
+  vars:
+    namespace: "budeval"  # Namespace where jobs run
+    pvc_name: "eval-datasets-pvc"
+    volume_size: "10Gi"  # TODO: change to 100Gi for production
+    storage_class: ""  # Empty string means use default storage class
+    # Access mode - can be overridden via extravars
+    access_mode: "ReadWriteMany"  # Default to RWX for shared access
+
+  tasks:
+    - name: Ensure namespace exists
+      community.kubernetes.k8s:
+        name: "{{ namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+
+    - name: Check if PVC exists
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ pvc_name }}"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      register: pvc_check
+      failed_when: false
+
+    - name: Create PVC if it doesn't exist
+      community.kubernetes.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ pvc_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: budeval
+              purpose: shared-datasets
+          spec:
+            accessModes:
+              - "{{ access_mode }}"  # RWX for production, can fallback to RWO for local
+            storageClassName: "{{ storage_class }}"  # Use default storage class
+            resources:
+              requests:
+                storage: "{{ volume_size }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      when: pvc_check.resources | length == 0
+
+    - name: Check if PVC needs first consumer (for local-path)
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ pvc_name }}"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      register: pvc_initial_status
+      when: pvc_check.resources | length == 0
+
+    - name: Create temporary pod to trigger volume binding (for WaitForFirstConsumer)
+      community.kubernetes.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: "{{ pvc_name }}-init-pod"
+            namespace: "{{ namespace }}"
+            labels:
+              app: budeval
+              purpose: volume-init
+          spec:
+            containers:
+            - name: init
+              image: busybox:1.36
+              command: ["sh", "-c", "echo 'Volume initialized' > /data/init.txt && sleep 5"]
+              volumeMounts:
+              - name: data
+                mountPath: /data
+            volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: "{{ pvc_name }}"
+            restartPolicy: Never
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      when: pvc_check.resources | length == 0 and pvc_initial_status.resources | length > 0 and pvc_initial_status.resources[0].status.phase == "Pending"
+
+    - name: Wait for PVC to be bound (if newly created)
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ pvc_name }}"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      register: pvc_status
+      until: pvc_status.resources | length > 0 and pvc_status.resources[0].status.phase == "Bound"
+      retries: 30
+      delay: 10
+      when: pvc_check.resources | length == 0
+
+    - name: Clean up temporary init pod
+      community.kubernetes.k8s:
+        state: absent
+        api_version: v1
+        kind: Pod
+        name: "{{ pvc_name }}-init-pod"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      when: pvc_check.resources | length == 0
+      ignore_errors: yes
+
+    - name: Display volume status
+      debug:
+        msg: |
+          PVC {{ pvc_name }} status: {{ 'Created' if pvc_check.resources | length == 0 else 'Already exists' }}
+          Namespace: {{ namespace }}
+          Storage Class: {{ storage_class if storage_class else 'default' }}
+          Size: {{ volume_size }}
