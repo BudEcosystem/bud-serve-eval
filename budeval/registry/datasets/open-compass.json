@@ -1,0 +1,27 @@
+{
+    "engine": "opencompass",
+    "datasets" : [
+            {
+                "id": "ARC_c_gen_v1",
+                "dataset": "ARC_c_gen",
+                "label": "ARC c",
+                "config_path": "opencompass/configs/datasets/ARC_c/ARC_c_gen.py",
+                "arc": "Knowledge",
+                "description": "### Introduction\n\nThe AI2\u2019s Reasoning Challenge (ARC) dataset is a multiple-choice question-answering dataset, containing questions from science exams from grade 3 to grade 9. The dataset is split in two partitions: Easy and Challenge, where the latter partition contains the more difficult questions that require reasoning. Most of the questions have 4 answer choices, with <1% of all the questions having either 3 or 5 answer choices.\n\n## Meta Data\n\nThe dataset has:\n\n- **ID**: A unique identifier for the question (our own numbering)  \n- **Question**: The body of the question  \n- **Stem**: The question text  \n- **Choices**: The answer choices  \n- **Label**: The answer label (\u201cA\u201d, \u201cB\u201d, \u201cC\u201d, \u201cD\u201d)  \n- **Text**: The text associated with the answer label  \n\n## Example\n\n```\nQuestion: Which technology was developed most recently?\nA: cellular telephone\nB: television\nC: refrigerator\nD: airplane\nAnswer: A\n```\n\n## Citation\n\n```bibtex\n@misc{clark2018think,\n  title={Think you have Solved Question Answering? Try ARC, the AI2 Reasoning Challenge},\n  author={Peter Clark and Isaac Cowhey and Oren Etzioni and Tushar Khot and Ashish Sabharwal and Carissa Schoenick and Oyvind Tafjord},\n  year={2018},\n  eprint={1803.05457},\n  archivePrefix={arXiv},\n  primaryClass={cs.AI}\n}\n```",
+                "links" : [
+                    {
+                        "name": "Dataset",
+                        "url": "https://huggingface.co/datasets/ai2-arc"
+                    },
+                    {
+                        "name": "Paper",
+                        "url": "https://arxiv.org/abs/1803.05457"
+                    },
+                    {
+                        "name": "Website",
+                        "url": "https://allenai.org/data/arc"
+                    }
+                ]
+            }
+    ]
+}

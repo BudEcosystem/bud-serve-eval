@@ -432,8 +432,14 @@ class EvaluationWorkflow:
             
             # Check Kubernetes job status from details
             if job_details_info:
-                succeeded = job_details_info.get("succeeded", 0)
-                failed = job_details_info.get("failed", 0)
+                # Safely convert to int, handling both string and int values
+                try:
+                    succeeded = int(job_details_info.get("succeeded", 0))
+                    failed = int(job_details_info.get("failed", 0))
+                except (ValueError, TypeError):
+                    # Fallback to 0 if conversion fails
+                    succeeded = 0
+                    failed = 0
                 
                 if succeeded > 0:
                     job_completed = True

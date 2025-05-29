@@ -426,9 +426,16 @@ class AnsibleOrchestrator:
                                 status_info.update(job_status)
                                 
                                 # Determine overall status based on job conditions
-                                active = int(job_status.get('active', 0))
-                                succeeded = int(job_status.get('succeeded', 0))
-                                failed = int(job_status.get('failed', 0))
+                                # Safely convert to int, handling both string and int values
+                                try:
+                                    active = int(job_status.get('active', 0))
+                                    succeeded = int(job_status.get('succeeded', 0))
+                                    failed = int(job_status.get('failed', 0))
+                                except (ValueError, TypeError):
+                                    # Fallback to 0 if conversion fails
+                                    active = 0
+                                    succeeded = 0
+                                    failed = 0
                                 
                                 if succeeded > 0:
                                     status_info['status'] = 'succeeded'

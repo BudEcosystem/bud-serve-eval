@@ -77,8 +77,8 @@ class EvaluationOpsService:
                 docker_image=engine_metadata.docker_image_url,
                 namespace="budeval",
                 ttl_seconds=3600,  # 1 hour TTL
-                data_volume_size="100Gi",
-                output_volume_size="50Gi",
+                data_volume_size="10Gi", # Testing
+                output_volume_size="10Gi", # Testing
             )
 
             logger.info(f"Successfully deployed evaluation job {job_uuid}")
