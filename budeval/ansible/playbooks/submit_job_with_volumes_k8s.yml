@@ -13,32 +13,32 @@
         api_version: v1
         kind: Namespace
         state: present
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
 
     - name: Create data persistent volume
       community.kubernetes.k8s:
         state: present
         definition: "{{ lookup('file', pv_data_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
 
     - name: Create output persistent volume
       community.kubernetes.k8s:
         state: present
         definition: "{{ lookup('file', pv_output_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
 
     - name: Create data persistent volume claim
       community.kubernetes.k8s:
         state: present
         definition: "{{ lookup('file', pvc_data_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
         namespace: "{{ namespace }}"
 
     - name: Create output persistent volume claim
       community.kubernetes.k8s:
         state: present
         definition: "{{ lookup('file', pvc_output_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
         namespace: "{{ namespace }}"
 
     - name: Wait for data PVC to be bound
@@ -47,7 +47,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-data-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: data_pvc_result
       until: data_pvc_result.resources | length > 0 and data_pvc_result.resources[0].status.phase == "Bound"
       retries: 30
@@ -59,7 +59,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-output-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: output_pvc_result
       until: output_pvc_result.resources | length > 0 and output_pvc_result.resources[0].status.phase == "Bound"
       retries: 30
@@ -69,7 +69,7 @@
       community.kubernetes.k8s:
         state: present
         definition: "{{ lookup('file', job_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
         namespace: "{{ namespace }}"
 
     - name: Verify job was created
@@ -78,7 +78,7 @@
         kind: Job
         name: "{{ job_name }}"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: job_creation_result
       until: job_creation_result.resources | length > 0
       retries: 10
@@ -90,7 +90,7 @@
         kind: Job
         name: "{{ job_name }}"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: job_status
 
     - name: Display job information

@@ -13,7 +13,7 @@
         kind: Job
         name: "{{ job_name }}"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: job_info
 
     - name: Get pod information for the job
@@ -23,7 +23,7 @@
         namespace: "{{ namespace }}"
         label_selectors:
           - "job-name={{ job_name }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: pod_info
 
     - name: Get data PVC status
@@ -32,7 +32,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-data-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: data_pvc_info
 
     - name: Get output PVC status
@@ -41,7 +41,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-output-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       register: output_pvc_info
 
     - name: Display job status

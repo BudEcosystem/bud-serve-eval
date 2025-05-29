@@ -12,7 +12,7 @@ class EvaluationRequest(CloudEventBase):
     model_name: str = Field(..., description="Name of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
     base_url: str = Field(..., description="Base URL for the model API")
-    kubeconfig: str = Field(..., description="Kubernetes configuration JSON content")
+    kubeconfig: Optional[str] = Field(None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)")
 
     class Config: #noqa
         json_schema_extra = {
@@ -33,7 +33,7 @@ class StartEvaluationRequest(CloudEventBase):
     model_name: str = Field(..., description="Name of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
     base_url: str = Field(..., description="Base URL for the model API")
-    kubeconfig: str = Field(..., description="Kubernetes configuration JSON content")
+    kubeconfig: Optional[str] = Field(None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)")
 
     class Config: #noqa
         json_schema_extra = {
@@ -51,7 +51,7 @@ class DeployEvalJobRequest(BaseModel):
 
     engine: str = Field(..., description="Engine to use for the evaluation job")
     eval_request_id: str = Field(..., description="Unique identifier for the job")
-    kubeconfig: str = Field(..., description="Kubernetes configuration JSON content")
+    kubeconfig: Optional[str] = Field(None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)")
     api_key: str = Field(..., description="API key for authentication")
     base_url: str = Field(..., description="Base URL for the model API")
     dataset: List[str] = Field(..., description="Datasets to evaluate on")

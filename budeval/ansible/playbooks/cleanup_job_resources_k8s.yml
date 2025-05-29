@@ -14,7 +14,7 @@
         kind: Job
         name: "{{ job_name }}"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       ignore_errors: yes
 
     - name: Delete data persistent volume claim
@@ -24,7 +24,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-data-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       ignore_errors: yes
 
     - name: Delete output persistent volume claim
@@ -34,7 +34,7 @@
         kind: PersistentVolumeClaim
         name: "{{ job_name }}-output-pvc"
         namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       ignore_errors: yes
 
     - name: Delete data persistent volume
@@ -43,7 +43,7 @@
         api_version: v1
         kind: PersistentVolume
         name: "{{ job_name }}-data-pv"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       ignore_errors: yes
 
     - name: Delete output persistent volume
@@ -52,7 +52,7 @@
         api_version: v1
         kind: PersistentVolume
         name: "{{ job_name }}-output-pv"
-        kubeconfig: "{{ kubeconfig_path }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       ignore_errors: yes
 
     - name: Display cleanup completion

@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 from budmicroframe.commons.schemas import ErrorResponse, WorkflowMetadataResponse
 
@@ -95,7 +95,7 @@ class EvaluationOpsService:
             raise e
 
     @classmethod
-    async def get_job_status(cls, job_id: str, kubeconfig: str, namespace: str = "budeval") -> dict:
+    async def get_job_status(cls, job_id: str, kubeconfig: Optional[str], namespace: str = "budeval") -> dict:
         """Get the status of a deployed evaluation job."""
         logger.info(f"Getting status for job: {job_id}")
 
@@ -120,7 +120,7 @@ class EvaluationOpsService:
             return {"job_id": job_id, "status": "error", "error": str(e)}
 
     @classmethod
-    async def cleanup_job(cls, job_id: str, kubeconfig: str, namespace: str = "budeval") -> dict:
+    async def cleanup_job(cls, job_id: str, kubeconfig: Optional[str], namespace: str = "budeval") -> dict:
         """Clean up a deployed evaluation job and its resources."""
         logger.info(f"Cleaning up job: {job_id}")
 
