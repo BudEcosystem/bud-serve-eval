@@ -15,18 +15,6 @@
         state: present
         kubeconfig: "{{ kubeconfig_path | default(omit) }}"
 
-    - name: Create data persistent volume
-      community.kubernetes.k8s:
-        state: present
-        definition: "{{ lookup('file', pv_data_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
-
-    - name: Create output persistent volume
-      community.kubernetes.k8s:
-        state: present
-        definition: "{{ lookup('file', pv_output_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
-
     - name: Create data persistent volume claim
       community.kubernetes.k8s:
         state: present
