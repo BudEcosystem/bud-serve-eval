@@ -32,13 +32,25 @@ app.include_router(evals_routes)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize volume on startup in the background."""
+    """Initialize volumes and preload engines on startup in the background."""
     try:
         from .evals.volume_init import VolumeInitializer
+        from .evals.engine_preloader import EnginePreloader
         
-        logger.info("Starting background volume initialization on startup")
+        logger.info("Starting background initialization on startup")
+        
+        # Initialize volume initializer and engine preloader
         volume_init = VolumeInitializer()
-        # Create a background task for volume initialization
-        asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+        engine_preloader = EnginePreloader()
+        
+        # Create background tasks for both volume initialization and engine preloading
+        logger.info("Creating background task for volume initialization")
+        volume_task = asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+        
+        logger.info("Creating background task for engine preloading")
+        engine_task = asyncio.create_task(engine_preloader.preload_all_engines())
+        
+        logger.info("Background initialization tasks started successfully")
+        
     except Exception as e:
-        logger.error(f"Failed to start volume initialization: {e}", exc_info=True)
+        logger.error(f"Failed to start background initialization: {e}", exc_info=True)

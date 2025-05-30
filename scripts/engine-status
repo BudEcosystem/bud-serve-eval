@@ -1,0 +1,32 @@
+#!/bin/bash
+# Quick command to check engine preloading status
+
+echo "🔍 Evaluation Engine Status Check"
+echo
+
+# Check if ConfigMap exists
+if kubectl get configmap preloaded-engines -n budeval >/dev/null 2>&1; then
+    echo "✅ Engine preloading ConfigMap found"
+    echo
+    
+    # Get engine information
+    kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.last_updated}' | xargs -I {} echo "📅 Last updated: {}"
+    echo
+    
+    # Count engines
+    engine_count=$(kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.engines}' | jq '. | length' 2>/dev/null || echo "0")
+    echo "🔧 Preloaded engines: $engine_count"
+    echo
+    
+    # List engines
+    echo "📋 Preloaded engines:"
+    kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.engines}' | jq -r 'to_entries[] | "  • \(.key) (\(.value.version)) - \(.value.image)"' 2>/dev/null || echo "  (Unable to parse engine data)"
+    
+else
+    echo "❌ No engine preloading ConfigMap found"
+    echo "   Engines have not been preloaded yet"
+fi
+
+echo
+echo "💡 For detailed status: python check_engine_status.py"
+echo "💡 API endpoint: GET /evals/engine-status" 

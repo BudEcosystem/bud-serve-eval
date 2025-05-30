@@ -1,0 +1,75 @@
+#!/bin/bash
+# Quick command to check engine preloading status
+
+echo "🔍 Evaluation Engine Status Check"
+echo
+
+# Check container runtime
+echo "🔧 Container Runtime:"
+runtime=$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}' 2>/dev/null)
+if [ $? -eq 0 ]; then
+    echo "   $runtime"
+    if [[ "$runtime" == *"containerd"* ]]; then
+        echo "   📦 Type: containerd (K3s compatible)"
+    elif [[ "$runtime" == *"docker"* ]]; then
+        echo "   🐳 Type: Docker"
+    fi
+else
+    echo "   ❌ Could not detect runtime"
+fi
+echo
+
+# Check if ConfigMap exists
+if kubectl get configmap preloaded-engines -n budeval >/dev/null 2>&1; then
+    echo "✅ Engine preloading ConfigMap found"
+    echo
+    
+    # Get engine information
+    kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.last_updated}' | xargs -I {} echo "📅 Last updated: {}"
+    
+    # Get preload method
+    method=$(kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.preload_method}' 2>/dev/null)
+    if [ ! -z "$method" ]; then
+        echo "⚙️ Preload method: $method"
+    fi
+    echo
+    
+    # Count engines
+    engine_count=$(kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.engines}' | jq '. | length' 2>/dev/null || echo "0")
+    echo "🔧 Preloaded engines: $engine_count"
+    echo
+    
+    # List engines
+    echo "📋 Preloaded engines:"
+    kubectl get configmap preloaded-engines -n budeval -o jsonpath='{.data.engines}' | jq -r 'to_entries[] | "  • \(.key) (\(.value.version)) - \(.value.image)"' 2>/dev/null || echo "  (Unable to parse engine data)"
+    
+else
+    echo "❌ No engine preloading ConfigMap found"
+    echo "   Engines have not been preloaded yet"
+fi
+
+echo
+
+# Check for running preload jobs
+echo "🔄 Preload Jobs Status:"
+running_jobs=$(kubectl get jobs -n budeval -l purpose=image-preloader --no-headers 2>/dev/null | wc -l)
+if [ "$running_jobs" -gt 0 ]; then
+    echo "   Found $running_jobs running preload jobs"
+    kubectl get jobs -n budeval -l purpose=image-preloader --no-headers | head -3
+    if [ "$running_jobs" -gt 3 ]; then
+        echo "   ... and $((running_jobs - 3)) more"
+    fi
+else
+    echo "   ✅ No preload jobs currently running"
+fi
+
+# Check for completed jobs
+completed_jobs=$(kubectl get jobs -n budeval -l purpose=image-preloader --field-selector=status.successful>0 --no-headers 2>/dev/null | wc -l)
+if [ "$completed_jobs" -gt 0 ]; then
+    echo "   ✅ Found $completed_jobs completed preload jobs"
+fi
+
+echo
+echo "💡 For detailed status: python check_engine_status.py"
+echo "💡 Check jobs: kubectl get jobs -n budeval -l purpose=image-preloader"
+echo "💡 API endpoint: GET /evals/engine-status" 

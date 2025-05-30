@@ -92,7 +92,7 @@ The evaluation workflow consists of three main activities:
 
 # Production
 {
-  "access_mode": "ReadWriteOnce",
+  "access_mode": "ReadWriteOnce",bu
   "storage_class": "",  # Use cluster default
   "data_size": "20Gi",
   "output_size": "20Gi"

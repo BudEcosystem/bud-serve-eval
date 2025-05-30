@@ -16,7 +16,7 @@
 
 from budmicroframe.commons import logging
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 
 from budeval.evals.services import EvaluationService, EvaluationOpsService
 
@@ -38,15 +38,23 @@ async def start_eval(request: EvaluationRequest):
         dict: A simple hello world message
     """
     try:
-        import asyncio
-        from budeval.evals.volume_init import VolumeInitializer
+        # import asyncio
+        # from budeval.evals.volume_init import VolumeInitializer
+        # from budeval.evals.engine_preloader import EnginePreloader
 
-        # Start volume initialization in background if not already initialized
-        volume_init = VolumeInitializer()
-        if not VolumeInitializer._initialized:
-            logger.info("Starting background volume initialization")
-            # Create a background task that won't block the request
-            asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+        # # Start volume initialization in background if not already initialized
+        # volume_init = VolumeInitializer()
+        # if not VolumeInitializer._initialized:
+        #     logger.info("Starting background volume initialization")
+        #     # Create a background task that won't block the request
+        #     asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+        
+        # # Start engine preloading in background if not already initialized
+        # engine_preloader = EnginePreloader()
+        # if not EnginePreloader.is_initialized():
+        #     logger.info("Starting background engine preloading")
+        #     # Create a background task that won't block the request
+        #     asyncio.create_task(engine_preloader.preload_all_engines())
         
         # Proceed with evaluation request immediately
         response = await EvaluationService().evaluate_model(request)
@@ -112,6 +120,80 @@ async def init_volume():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to initialize volume: {str(e)}"
+        ) from e
+
+@evals_routes.post("/preload-engines")
+async def preload_engines(engine_names: Optional[List[str]] = None):
+    """Manually preload evaluation engine Docker images.
+    
+    Args:
+        engine_names (Optional[List[str]]): Specific engine names to preload. If None, preloads all engines.
+    
+    Returns:
+        dict: Engine preloading result
+    """
+    try:
+        from budeval.evals.engine_preloader import EnginePreloader
+        
+        engine_preloader = EnginePreloader()
+        
+        if engine_names:
+            await engine_preloader.preload_specific_engines(engine_names)
+            message = f"Specific engines preloaded: {engine_names}"
+        else:
+            await engine_preloader.preload_all_engines()
+            message = "All evaluation engines preloaded"
+        
+        return {
+            "status": "success", 
+            "message": message,
+            "preloaded_engines": list(EnginePreloader.get_preloaded_engines())
+        }
+    except Exception as e:
+        logger.error(f"Failed to preload engines: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to preload engines: {str(e)}"
+        ) from e
+
+@evals_routes.get("/engine-status")
+async def get_engine_status():
+    """Get the status of engine preloading.
+    
+    Returns:
+        dict: Engine preloading status information
+    """
+    try:
+        from budeval.evals.engine_preloader import EnginePreloader
+        from budeval.registry.engines.core import EngineRegistry
+        
+        # Get all registered engines
+        registered_engines = EngineRegistry.list_engines()
+        
+        # Get preloaded engines
+        preloaded_engines = EnginePreloader.get_preloaded_engines()
+        
+        # Calculate status
+        engine_status = {}
+        for engine_name, metadata in registered_engines.items():
+            engine_status[engine_name] = {
+                "preloaded": EnginePreloader.is_engine_preloaded(engine_name),
+                "docker_image": metadata.docker_image_url,
+                "version": metadata.version,
+                "description": metadata.description
+            }
+        
+        return {
+            "initialized": EnginePreloader.is_initialized(),
+            "total_engines": len(registered_engines),
+            "preloaded_count": len(preloaded_engines),
+            "engines": engine_status
+        }
+    except Exception as e:
+        logger.error(f"Failed to get engine status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get engine status: {str(e)}"
         ) from e
 
 @evals_routes.post("/test-deploy")
