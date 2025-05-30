@@ -38,11 +38,17 @@ async def start_eval(request: EvaluationRequest):
         dict: A simple hello world message
     """
     try:
+        import asyncio
         from budeval.evals.volume_init import VolumeInitializer
 
+        # Start volume initialization in background if not already initialized
         volume_init = VolumeInitializer()
-        await volume_init.ensure_eval_datasets_volume()
-
+        if not VolumeInitializer._initialized:
+            logger.info("Starting background volume initialization")
+            # Create a background task that won't block the request
+            asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+        
+        # Proceed with evaluation request immediately
         response = await EvaluationService().evaluate_model(request)
         return response
     except Exception as e:
