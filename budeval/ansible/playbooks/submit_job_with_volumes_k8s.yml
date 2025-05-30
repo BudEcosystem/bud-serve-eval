@@ -29,30 +29,6 @@
         kubeconfig: "{{ kubeconfig_path | default(omit) }}"
         namespace: "{{ namespace }}"
 
-    - name: Wait for data PVC to be bound
-      community.kubernetes.k8s_info:
-        api_version: v1
-        kind: PersistentVolumeClaim
-        name: "{{ job_name }}-data-pvc"
-        namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
-      register: data_pvc_result
-      until: data_pvc_result.resources | length > 0 and data_pvc_result.resources[0].status.phase == "Bound"
-      retries: 30
-      delay: 10
-
-    - name: Wait for output PVC to be bound
-      community.kubernetes.k8s_info:
-        api_version: v1
-        kind: PersistentVolumeClaim
-        name: "{{ job_name }}-output-pvc"
-        namespace: "{{ namespace }}"
-        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
-      register: output_pvc_result
-      until: output_pvc_result.resources | length > 0 and output_pvc_result.resources[0].status.phase == "Bound"
-      retries: 30
-      delay: 10
-
     - name: Deploy evaluation job
       community.kubernetes.k8s:
         state: present
