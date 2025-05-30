@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
     version="0.4.2",
     description="OpenCompass is an LLM evaluation platform, supporting a wide range of models over 100+ datasets",
     author="OpenCompass Contributors",
-    docker_image_url="busybox",  #docker_image_url="ghcr.io/open-compass/opencompass:0.4.2",
+    docker_image_url="ghcr.io/rahulvramesh/opencompass:latest",
     tags=["llm", "evaluation", "benchmark", "open-source"],
     config_schema={
         "required": ["model_path", "datasets"],

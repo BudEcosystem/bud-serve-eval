@@ -640,8 +640,6 @@ spec:
       containers:
         - name: engine
           image: {docker_image}
-          command: ["/bin/sh", "-c"]
-          args: ["echo 'Starting evaluation job...'; echo 'Engine args:'; echo $ENGINE_ARGS; echo 'Waiting 20 seconds...'; sleep 20; echo 'Job completed successfully!'"]
           env:
             - name: ENGINE_ARGS
               value: '{safe_args}'
