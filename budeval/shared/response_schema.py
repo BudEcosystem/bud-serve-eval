@@ -14,9 +14,7 @@ class Response(BaseModel, Generic[T]):
     status_code: int = 200
 
     @classmethod
-    def success_response(
-        cls, data: T, message: str = "Success", status_code: int = 200
-    ) -> "Response[T]":
+    def success_response(cls, data: T, message: str = "Success", status_code: int = 200) -> "Response[T]":
         """Create a success response with the given data, message, and status code.
 
         Args:
@@ -26,9 +24,7 @@ class Response(BaseModel, Generic[T]):
         return cls(success=True, message=message, data=data, status_code=status_code)
 
     @classmethod
-    def error_response(
-        cls, message: str, error: str, status_code: int = 400
-    ) -> "Response[Any]":
+    def error_response(cls, message: str, error: str, status_code: int = 400) -> "Response[Any]":
         """Create an error response with the given message, error, and status code.
 
         Args:

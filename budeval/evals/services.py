@@ -51,7 +51,9 @@ class EvaluationOpsService:
 
             try:
                 engine_metadata = EngineRegistry.get_metadata(evaluate_model_request.engine)
-                logger.info(f"Using engine: {evaluate_model_request.engine}, Docker image: {engine_metadata.docker_image_url}")
+                logger.info(
+                    f"Using engine: {evaluate_model_request.engine}, Docker image: {engine_metadata.docker_image_url}"
+                )
             except KeyError as e:
                 logger.error(f"Engine {evaluate_model_request.engine} not found in registry: {e}")
                 logger.error(f"Available engines: {list(registered_engines.keys())}")
@@ -77,8 +79,8 @@ class EvaluationOpsService:
                 docker_image=engine_metadata.docker_image_url,
                 namespace="budeval",
                 ttl_seconds=3600,  # 1 hour TTL
-                data_volume_size="10Gi", # Testing
-                output_volume_size="10Gi", # Testing
+                data_volume_size="10Gi",  # Testing
+                output_volume_size="10Gi",  # Testing
             )
 
             logger.info(f"Successfully deployed evaluation job {job_uuid}")

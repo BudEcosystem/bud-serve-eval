@@ -17,6 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `cd deploy && docker-compose -f docker-compose-dev.yaml up` - Start development environment
 - `python -m budeval.main` - Run application directly
 - API available at `http://localhost:9081`
+- `dapr run --run-file ./app.yaml` - Start application with Dapr
+- Logs available under `.dapr/logs/`
 
 **Kubernetes Utilities:**
 - `python check_volume.py` - Check volume status

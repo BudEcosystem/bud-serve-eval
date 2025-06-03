@@ -42,11 +42,11 @@ class AnsibleOrchestrator:
 
         files = {}
         extravars = {}
-        
+
         # For Testing: Load from local yaml file if no kubeconfig provided
         if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
             # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
                 kubeconfig_yaml_content = f.read()
             # Since it's already YAML, we don't need to parse/convert it
             files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml_content}
@@ -56,11 +56,7 @@ class AnsibleOrchestrator:
             kubeconfig_dict = json.loads(kubeconfig)
 
             # 2) Dump that dict out as YAML
-            kubeconfig_yaml = yaml.safe_dump(
-                kubeconfig_dict,
-                sort_keys=False,
-                default_flow_style=False
-            )
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
 
             files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml}
             extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
@@ -117,15 +113,11 @@ class AnsibleOrchestrator:
             "job_template_path": "job.yaml",
             "namespace": namespace,
         }
-        
+
         if kubeconfig:
             # Parse and convert kubeconfig if provided
             kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(
-                kubeconfig_dict,
-                sort_keys=False,
-                default_flow_style=False
-            )
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
             extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
         else:
@@ -176,9 +168,7 @@ class AnsibleOrchestrator:
         pvc_output_yaml = self._render_persistent_volume_claim_yaml(
             f"{uuid}-output-pvc", f"{uuid}-output-pv", output_volume_size, namespace
         )
-        job_yaml = self._render_job_with_volumes_yaml(
-            uuid, docker_image, engine_args, namespace, ttl_seconds
-        )
+        job_yaml = self._render_job_with_volumes_yaml(uuid, docker_image, engine_args, namespace, ttl_seconds)
 
         files = {
             "pvc-data.yaml": pvc_data_yaml,
@@ -192,11 +182,11 @@ class AnsibleOrchestrator:
             "job_template_path": "job.yaml",
             "namespace": namespace,
         }
-        
+
         # For Testing: Load from local yaml file if no kubeconfig provided
         if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
             # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
                 kubeconfig_yaml_content = f.read()
             # Since it's already YAML, we don't need to parse/convert it
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
@@ -204,11 +194,7 @@ class AnsibleOrchestrator:
         elif kubeconfig:
             # Parse and convert kubeconfig if provided
             kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(
-                kubeconfig_dict,
-                sort_keys=False,
-                default_flow_style=False
-            )
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
             extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
         else:
@@ -231,17 +217,17 @@ class AnsibleOrchestrator:
             namespace: Kubernetes namespace. Defaults to "budeval".
         """
         playbook = "cleanup_job_resources_k8s.yml"
-        
+
         files = {}
         extravars = {
             "job_name": uuid,
             "namespace": namespace,
         }
-        
+
         # For Testing: Load from local yaml file if no kubeconfig provided
         if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
             # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
                 kubeconfig_yaml_content = f.read()
             # Since it's already YAML, we don't need to parse/convert it
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
@@ -249,11 +235,7 @@ class AnsibleOrchestrator:
         elif kubeconfig:
             # Parse and convert kubeconfig if provided
             kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(
-                kubeconfig_dict,
-                sort_keys=False,
-                default_flow_style=False
-            )
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
             extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
         else:
@@ -284,17 +266,17 @@ class AnsibleOrchestrator:
             Dict containing job status information.
         """
         playbook = "get_job_status_k8s.yml"
-        
+
         files = {}
         extravars = {
             "job_name": uuid,
             "namespace": namespace,
         }
-        
+
         # For Testing: Load from local yaml file if no kubeconfig provided
         if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
             # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", 'r') as f:
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
                 kubeconfig_yaml_content = f.read()
             # Since it's already YAML, we don't need to parse/convert it
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
@@ -302,11 +284,7 @@ class AnsibleOrchestrator:
         elif kubeconfig:
             # Parse and convert kubeconfig if provided
             kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(
-                kubeconfig_dict,
-                sort_keys=False,
-                default_flow_style=False
-            )
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
             files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
             extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
         else:
@@ -316,23 +294,18 @@ class AnsibleOrchestrator:
         try:
             result = self._run_ansible_playbook_with_output(playbook, uuid, files, extravars)
             logger.info(f"Successfully retrieved status for job {uuid}")
-            
+
             # Parse the Ansible output to extract job status
             job_status = self._parse_job_status_from_ansible_output(result, uuid)
             return job_status
-            
+
         except Exception as e:
             logger.error(f"Failed to get status for job {uuid}: {e}", exc_info=True)
-            return {
-                "status": "error",
-                "phase": "failed",
-                "message": str(e),
-                "active": 0,
-                "succeeded": 0,
-                "failed": 1
-            }
+            return {"status": "error", "phase": "failed", "message": str(e), "active": 0, "succeeded": 0, "failed": 1}
 
-    def _run_ansible_playbook(self, playbook: str, uuid: str, files: Dict[str, str], extravars: Dict[str, Any]) -> None:
+    def _run_ansible_playbook(
+        self, playbook: str, uuid: str, files: Dict[str, str], extravars: Dict[str, Any]
+    ) -> None:
         playbook_path = self._playbook_dir / playbook
         if not playbook_path.exists():
             raise FileNotFoundError(f"Playbook not found: {playbook_path}")
@@ -342,9 +315,7 @@ class AnsibleOrchestrator:
 
         # Write ansible.cfg to enforce interpreter and disable host key checking
         (pdir / "ansible.cfg").write_text(
-            "[defaults]\n"
-            f"interpreter_python = {sys.executable}\n"
-            "host_key_checking = False\n"
+            f"[defaults]\ninterpreter_python = {sys.executable}\nhost_key_checking = False\n"
         )
 
         # Create inventory
@@ -380,7 +351,7 @@ class AnsibleOrchestrator:
 
         # Environment vars for ansible-runner
         venv_bin = os.path.dirname(sys.executable)
-        current_path = os.environ.get('PATH', '')
+        current_path = os.environ.get("PATH", "")
         envvars = {
             "ANSIBLE_PYTHON_INTERPRETER": sys.executable,
             "ANSIBLE_HOST_KEY_CHECKING": "False",
@@ -390,7 +361,7 @@ class AnsibleOrchestrator:
         logger.info(f"Running Ansible playbook: {playbook} with extravars: {extravars}")
         logger.info(f"Using Python interpreter: {sys.executable}")
         logger.info(f"PATH environment: {envvars['PATH']}")
-        
+
         res = ansible_runner.run(
             private_data_dir=str(pdir),
             playbook=playbook,
@@ -401,15 +372,17 @@ class AnsibleOrchestrator:
 
         if res.rc != 0:
             error_msg = f"Ansible playbook failed: {playbook}, rc={res.rc}"
-            if hasattr(res, 'stdout') and res.stdout:
+            if hasattr(res, "stdout") and res.stdout:
                 error_msg += f", stdout: {res.stdout.read()}"
-            if hasattr(res, 'stderr') and res.stderr:
+            if hasattr(res, "stderr") and res.stderr:
                 error_msg += f", stderr: {res.stderr.read()}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
         logger.info("Playbook %s completed successfully for job %s", playbook, uuid)
 
-    def _run_ansible_playbook_with_output(self, playbook: str, uuid: str, files: Dict[str, str], extravars: Dict[str, Any]) -> Any:
+    def _run_ansible_playbook_with_output(
+        self, playbook: str, uuid: str, files: Dict[str, str], extravars: Dict[str, Any]
+    ) -> Any:
         """Run Ansible playbook and return the result object for output parsing."""
         playbook_path = self._playbook_dir / playbook
         if not playbook_path.exists():
@@ -420,9 +393,7 @@ class AnsibleOrchestrator:
 
         # Write ansible.cfg to enforce interpreter and disable host key checking
         (pdir / "ansible.cfg").write_text(
-            "[defaults]\n"
-            f"interpreter_python = {sys.executable}\n"
-            "host_key_checking = False\n"
+            f"[defaults]\ninterpreter_python = {sys.executable}\nhost_key_checking = False\n"
         )
 
         # Create inventory
@@ -458,7 +429,7 @@ class AnsibleOrchestrator:
 
         # Environment vars for ansible-runner
         venv_bin = os.path.dirname(sys.executable)
-        current_path = os.environ.get('PATH', '')
+        current_path = os.environ.get("PATH", "")
         envvars = {
             "ANSIBLE_PYTHON_INTERPRETER": sys.executable,
             "ANSIBLE_HOST_KEY_CHECKING": "False",
@@ -468,7 +439,7 @@ class AnsibleOrchestrator:
         logger.info(f"Running Ansible playbook: {playbook} with extravars: {extravars}")
         logger.info(f"Using Python interpreter: {sys.executable}")
         logger.info(f"PATH environment: {envvars['PATH']}")
-        
+
         res = ansible_runner.run(
             private_data_dir=str(pdir),
             playbook=playbook,
@@ -479,13 +450,13 @@ class AnsibleOrchestrator:
 
         if res.rc != 0:
             error_msg = f"Ansible playbook failed: {playbook}, rc={res.rc}"
-            if hasattr(res, 'stdout') and res.stdout:
+            if hasattr(res, "stdout") and res.stdout:
                 error_msg += f", stdout: {res.stdout.read()}"
-            if hasattr(res, 'stderr') and res.stderr:
+            if hasattr(res, "stderr") and res.stderr:
                 error_msg += f", stderr: {res.stderr.read()}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-        
+
         logger.info("Playbook %s completed successfully for job %s", playbook, uuid)
         return res
 
@@ -502,46 +473,46 @@ class AnsibleOrchestrator:
                 "pod_count": 0,
                 "data_pvc_status": "unknown",
                 "output_pvc_status": "unknown",
-                "message": "Status retrieved"
+                "message": "Status retrieved",
             }
 
             # Try to extract information from Ansible events
-            if hasattr(ansible_result, 'events'):
+            if hasattr(ansible_result, "events"):
                 for event in ansible_result.events:
-                    if event.get('event') == 'runner_on_ok':
-                        event_data = event.get('event_data', {})
-                        task_name = event_data.get('task', '')
-                        
+                    if event.get("event") == "runner_on_ok":
+                        event_data = event.get("event_data", {})
+                        task_name = event_data.get("task", "")
+
                         # Look for the set_fact task that contains job status
-                        if 'Set job status facts' in task_name:
-                            res = event_data.get('res', {})
-                            ansible_facts = res.get('ansible_facts', {})
-                            job_status = ansible_facts.get('job_status', {})
-                            
+                        if "Set job status facts" in task_name:
+                            res = event_data.get("res", {})
+                            ansible_facts = res.get("ansible_facts", {})
+                            job_status = ansible_facts.get("job_status", {})
+
                             if job_status:
                                 status_info.update(job_status)
-                                
+
                                 # Determine overall status based on job conditions
                                 # Safely convert to int, handling both string and int values
                                 try:
-                                    active = int(job_status.get('active', 0))
-                                    succeeded = int(job_status.get('succeeded', 0))
-                                    failed = int(job_status.get('failed', 0))
+                                    active = int(job_status.get("active", 0))
+                                    succeeded = int(job_status.get("succeeded", 0))
+                                    failed = int(job_status.get("failed", 0))
                                 except (ValueError, TypeError):
                                     # Fallback to 0 if conversion fails
                                     active = 0
                                     succeeded = 0
                                     failed = 0
-                                
+
                                 if succeeded > 0:
-                                    status_info['status'] = 'succeeded'
+                                    status_info["status"] = "succeeded"
                                 elif failed > 0:
-                                    status_info['status'] = 'failed'
+                                    status_info["status"] = "failed"
                                 elif active > 0:
-                                    status_info['status'] = 'running'
+                                    status_info["status"] = "running"
                                 else:
-                                    status_info['status'] = 'pending'
-                                
+                                    status_info["status"] = "pending"
+
                                 break
 
             logger.debug(f"Parsed job status for {job_name}: {status_info}")
@@ -555,7 +526,7 @@ class AnsibleOrchestrator:
                 "active": 0,
                 "succeeded": 0,
                 "failed": 0,
-                "message": f"Error parsing status: {str(e)}"
+                "message": f"Error parsing status: {str(e)}",
             }
 
     def _render_job_yaml(self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int) -> str:
@@ -600,9 +571,7 @@ spec:
   # No hostPath specified
 """
 
-    def _render_persistent_volume_claim_yaml(
-        self, name: str, pv_name: str, size: str, namespace: str
-    ) -> str:
+    def _render_persistent_volume_claim_yaml(self, name: str, pv_name: str, size: str, namespace: str) -> str:
         # Render a PVC using environment-aware configuration for job-specific volumes
         from budeval.commons.storage_config import StorageConfig
 
@@ -620,13 +589,15 @@ metadata:
 spec:
   accessModes:
     - {access_mode}
-{f'  storageClassName: {storage_class}' if storage_class else ''}
+{f"  storageClassName: {storage_class}" if storage_class else ""}
   resources:
     requests:
       storage: {size}
 """
 
-    def _render_job_with_volumes_yaml(self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int) -> str:
+    def _render_job_with_volumes_yaml(
+        self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int
+    ) -> str:
         safe_args = json.dumps(args)
         return f"""apiVersion: batch/v1
 kind: Job

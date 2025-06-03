@@ -1,4 +1,5 @@
 """OpenCompass engine implementation."""
+
 from typing import Any, Dict
 
 from budeval.commons.logging import logging
@@ -9,28 +10,39 @@ from .core import EngineMetadata, EngineRegistry
 logger = logging.getLogger(__name__)
 
 
-#TODO : Implement the command tempalate here
-@EngineRegistry.register(EngineMetadata(
-    name="OpenCompass",
-    version="0.4.2",
-    description="OpenCompass is an LLM evaluation platform, supporting a wide range of models over 100+ datasets",
-    author="OpenCompass Contributors",
-    docker_image_url="ghcr.io/rahulvramesh/opencompass:latest",
-    tags=["llm", "evaluation", "benchmark", "open-source"],
-    config_schema={
-        "required": ["model_path", "datasets"],
-        "properties": {
-            "model_path": {"type": "string", "description": "Path to the model or model name"},
-            "datasets": {"type": "array", "items": {"type": "string"}, "description": "List of datasets to evaluate on"},
-            "max_num_workers": {"type": "integer", "description": "Maximum number of workers for parallel evaluation"},
-            "inference_backend": {"type": "string", "enum": ["huggingface", "lmdeploy", "vllm"], "default": "huggingface"}
-        }
-    },
-    dependencies=[
-    ],
-    capabilities=[
-    ]
-))
+# TODO : Implement the command tempalate here
+@EngineRegistry.register(
+    EngineMetadata(
+        name="OpenCompass",
+        version="0.4.2",
+        description="OpenCompass is an LLM evaluation platform, supporting a wide range of models over 100+ datasets",
+        author="OpenCompass Contributors",
+        docker_image_url="ghcr.io/rahulvramesh/opencompass:latest",  # TODO: Change to a registry based with image and dataset
+        tags=["llm", "evaluation", "benchmark", "open-source"],
+        config_schema={
+            "required": ["model_path", "datasets"],
+            "properties": {
+                "model_path": {"type": "string", "description": "Path to the model or model name"},
+                "datasets": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of datasets to evaluate on",
+                },
+                "max_num_workers": {
+                    "type": "integer",
+                    "description": "Maximum number of workers for parallel evaluation",
+                },
+                "inference_backend": {
+                    "type": "string",
+                    "enum": ["huggingface", "lmdeploy", "vllm"],
+                    "default": "huggingface",
+                },
+            },
+        },
+        dependencies=[],
+        capabilities=[],
+    )
+)
 class OpenCompassEngine:
     """OpenCompass engine for LLM evaluation and benchmarking."""
 
@@ -68,14 +80,8 @@ class OpenCompassEngine:
 
         try:
             # Placeholder for actual implementation
-            return {
-                "status": "success",
-                "results": {}
-            }
+            return {"status": "success", "results": {}}
 
         except Exception as e:
             logger.error(f"Error during OpenCompass evaluation: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            return {"status": "error", "error": str(e)}

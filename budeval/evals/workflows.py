@@ -41,7 +41,6 @@ retry_policy = wf.RetryPolicy(
 
 # EvaluationWorkflow
 class EvaluationWorkflow:
-
     # Activities
     @dapr_workflows.register_activity
     @staticmethod
@@ -65,34 +64,25 @@ class EvaluationWorkflow:
 
         evaluate_model_request_json = StartEvaluationRequest.model_validate_json(evaluate_model_request)
         payload = DeployEvalJobRequest(
-           engine="OpenCompass",
-           eval_request_id=str(evaluate_model_request_json.eval_request_id),
-           api_key=evaluate_model_request_json.api_key,
-           base_url=evaluate_model_request_json.base_url,
-           kubeconfig=evaluate_model_request_json.kubeconfig,
-           dataset=["dataset1"] #TODO: Make this from the request
+            engine="OpenCompass",
+            eval_request_id=str(evaluate_model_request_json.eval_request_id),
+            api_key=evaluate_model_request_json.api_key,
+            base_url=evaluate_model_request_json.base_url,
+            kubeconfig=evaluate_model_request_json.kubeconfig,
+            dataset=["dataset1"],  # TODO: Make this from the request
         )
 
         logger.debug(f"Deploying evaluation job for {payload}")
 
         response: Union[SuccessResponse, ErrorResponse]
         try:
+            job_details = asyncio.run(EvaluationOpsService.deploy_eval_job(payload, task_id, workflow_id))
 
-            job_details = asyncio.run(
-                EvaluationOpsService.deploy_eval_job(
-                    payload, task_id, workflow_id
-                )
-            )
-
-            response = SuccessResponse(
-                message="Evaluation job deployed successfully",
-                param=dict(job_details)
-            )
+            response = SuccessResponse(message="Evaluation job deployed successfully", param=dict(job_details))
         except Exception as e:
             logger.error(f"Error deploying evaluation job: {e}", exc_info=True)
             response = ErrorResponse(
-                message="Error deploying evaluation job",
-                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+                message="Error deploying evaluation job", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
         return response.model_dump(mode="json")
 
@@ -116,7 +106,9 @@ class EvaluationWorkflow:
         workflow_id = ctx.workflow_id
         task_id = ctx.task_id
 
-        verify_cluster_connection_request_json = StartEvaluationRequest.model_validate_json(verify_cluster_connection_request)
+        verify_cluster_connection_request_json = StartEvaluationRequest.model_validate_json(
+            verify_cluster_connection_request
+        )
 
         response: Union[SuccessResponse, ErrorResponse]
         try:
@@ -171,23 +163,15 @@ class EvaluationWorkflow:
 
         response: Union[SuccessResponse, ErrorResponse]
         try:
-            job_status = asyncio.run(
-                EvaluationOpsService.get_job_status(
-                    job_id, kubeconfig, namespace
-                )
-            )
+            job_status = asyncio.run(EvaluationOpsService.get_job_status(job_id, kubeconfig, namespace))
 
             logger.debug(f"Job status for {job_id}: {job_status}")
 
-            response = SuccessResponse(
-                message="Job status retrieved successfully",
-                param=job_status
-            )
+            response = SuccessResponse(message="Job status retrieved successfully", param=job_status)
         except Exception as e:
             logger.error(f"Error monitoring job progress: {e}", exc_info=True)
             response = ErrorResponse(
-                message="Error monitoring job progress",
-                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+                message="Error monitoring job progress", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
         return response.model_dump(mode="json")
 
@@ -205,9 +189,7 @@ class EvaluationWorkflow:
                 including model name, API key, and cluster configuration.
         """
         logger = logging.getLogger("::EVAL:: EvaluateModelWorkflow")
-        logger.debug(
-            f"Evaluating model {evaluate_model_request}"
-        )
+        logger.debug(f"Evaluating model {evaluate_model_request}")
 
         instance_id = str(ctx.instance_id)
         logger.info(f"Evaluating model for instance_id: {instance_id}")
@@ -273,9 +255,9 @@ class EvaluationWorkflow:
         # End Of Notifications
         logger.info("Starting Cluster Connection Verification")
         verify_cluster_connection_result = yield ctx.call_activity(
-                EvaluationWorkflow.verify_cluster_connection,
-                input=evaluate_model_request_json.model_dump_json(),
-            )
+            EvaluationWorkflow.verify_cluster_connection,
+            input=evaluate_model_request_json.model_dump_json(),
+        )
 
         logger.debug(f"Cluster Connection Verification Result: {verify_cluster_connection_result}")
 
@@ -309,7 +291,6 @@ class EvaluationWorkflow:
             target_topic_name=evaluate_model_request_json.source_topic,
             target_name=evaluate_model_request_json.source,
         )
-
 
         # notify activity ETA
         notification_req.payload.event = "eta"
@@ -366,11 +347,11 @@ class EvaluationWorkflow:
 
         # Monitor Evaluation Job Progress
         logger.info("Starting job monitoring")
-        
+
         # Extract job details from deployment result
         job_details = deploy_eval_job_result.get("param", {})
         job_id = job_details.get("job_id")
-        
+
         if not job_id:
             logger.error("No job_id found in deployment result")
             notification_req.payload.event = "monitor_eval_job_progress"
@@ -391,7 +372,7 @@ class EvaluationWorkflow:
         monitor_request = {
             "job_id": job_id,
             "kubeconfig": evaluate_model_request_json.kubeconfig,
-            "namespace": "budeval"
+            "namespace": "budeval",
         }
 
         # Monitor job until completion
@@ -400,13 +381,15 @@ class EvaluationWorkflow:
         job_completed = False
         final_job_status = None
 
-        while monitoring_attempt < max_monitoring_attempts and not job_completed:
+        while (
+            monitoring_attempt < max_monitoring_attempts and not job_completed
+        ):  # TODO : Change to proper worflow based on dapr workflow
             monitoring_attempt += 1
-            
+
             # Wait before checking status (except for first attempt)
             if monitoring_attempt > 1:
                 yield ctx.create_timer(timedelta(seconds=5))
-            
+
             # Check job status
             monitor_result = yield ctx.call_activity(
                 EvaluationWorkflow.monitor_eval_job_progress,
@@ -422,14 +405,14 @@ class EvaluationWorkflow:
             job_status_data = monitor_result.get("param", {})
             job_status = job_status_data.get("status", "unknown")
             job_details_info = job_status_data.get("details", {})
-            
+
             # Check if job is completed (succeeded or failed)
             if job_status in ["completed", "succeeded", "failed", "error"]:
                 job_completed = True
                 final_job_status = job_status_data
                 logger.info(f"Job {job_id} completed with status: {job_status}")
                 break
-            
+
             # Check Kubernetes job status from details
             if job_details_info:
                 # Safely convert to int, handling both string and int values
@@ -440,7 +423,7 @@ class EvaluationWorkflow:
                     # Fallback to 0 if conversion fails
                     succeeded = 0
                     failed = 0
-                
+
                 if succeeded > 0:
                     job_completed = True
                     final_job_status = job_status_data
@@ -472,7 +455,7 @@ class EvaluationWorkflow:
         # Handle monitoring completion
         if job_completed and final_job_status:
             final_status = final_job_status.get("status", "unknown")
-            
+
             if final_status in ["succeeded", "completed"]:
                 # Job succeeded
                 notification_req.payload.event = "monitor_eval_job_progress"
@@ -522,22 +505,22 @@ class EvaluationWorkflow:
         # END OF WORKFLOW WITH NOTIFICATIONS
         # Result
         notification_req.payload.event = "results"
-        
+
         # Include actual job results if available
         job_results = {"job_id": job_id}
         if final_job_status:
             job_results.update(final_job_status)
-        
+
         notification_req.payload.content = NotificationContent(
             title="Model evaluation successful",
             message="Model evaluation completed successfully",
             status=WorkflowStatus.COMPLETED,
-            result=job_results
+            result=job_results,
         )
         workflow_status = check_workflow_status_in_statestore(instance_id)
         if workflow_status:
             # TODO: Delete workflow data from statestore
-            #asyncio.run(ClusterOpsService.delete_node_info_from_statestore(str(add_cluster_request_json.id)))
+            # asyncio.run(ClusterOpsService.delete_node_info_from_statestore(str(add_cluster_request_json.id)))
             return workflow_status
         dapr_workflows.publish_notification(
             workflow_id=instance_id,

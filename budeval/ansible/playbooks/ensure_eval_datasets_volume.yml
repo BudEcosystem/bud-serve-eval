@@ -124,6 +124,20 @@
             restartPolicy: Never
         kubeconfig: "{{ kubeconfig_path | default(omit) }}"
       when: pvc_check.resources | length == 0 and pvc_initial_status.resources | length > 0 and pvc_initial_status.resources[0].status.phase == "Pending"
+      register: init_pod_created
+
+    - name: Wait for initial dataset download completion
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: Pod
+        name: "{{ pvc_name }}-init-pod"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      register: initial_init_pod_status
+      until: initial_init_pod_status.resources | length > 0 and initial_init_pod_status.resources[0].status.phase in ["Succeeded", "Failed"]
+      retries: 60
+      delay: 30
+      when: pvc_check.resources | length == 0 and init_pod_created is defined and init_pod_created.changed
 
     - name: Wait for PVC to be bound (if newly created)
       community.kubernetes.k8s_info:
