@@ -612,6 +612,25 @@ spec:
         eval_request_id = args.get("eval_request_id", uuid)
         configmap_name = f"opencompass-config-{eval_request_id.lower()}"
 
+        # Extract datasets and append '_gen' suffix for OpenCompass
+        datasets = args.get("datasets", ["mmlu"])
+        datasets_with_gen = [f"{dataset}_gen" for dataset in datasets]
+        datasets_arg = " ".join(datasets_with_gen)
+
+        # Extract model configuration for CLI
+        model_name = args.get("model_name", "test-model")
+        api_key = args.get("api_key", "")
+        base_url = args.get("base_url", "")
+
+        # Create OpenCompass CLI arguments
+        # For API models, we need to use config files, not CLI args
+        run_args = [
+            "run.py",
+            "/workspace/configs/eval_config.py",
+            "--work-dir",
+            "/workspace/outputs",
+        ]
+
         return f"""apiVersion: batch/v1
 kind: Job
 metadata:
@@ -624,11 +643,19 @@ spec:
       containers:
         - name: engine
           image: {docker_image}
+          command: ["python"]
+          args: {json.dumps(run_args)}
           env:
             - name: ENGINE_ARGS
               value: '{safe_args}'
             - name: OPENCOMPASS_CONFIG_PATH
               value: '/workspace/configs'
+            - name: HF_HOME
+              value: '/workspace/cache'
+            - name: TRANSFORMERS_CACHE
+              value: '/workspace/cache'
+            - name: TORCH_HOME
+              value: '/workspace/cache'
           volumeMounts:
             - name: eval-datasets
               mountPath: /workspace/data
@@ -654,12 +681,12 @@ spec:
           configMap:
             name: {configmap_name}
             items:
-              - key: "bud-model.py"
-                path: "bud-model.py"
-              - key: "bud-datasets.py"
-                path: "bud-datasets.py"
-              - key: "eval-config.py"
-                path: "eval-config.py"
+              - key: "bud_model.py"
+                path: "bud_model.py"
+              - key: "bud_datasets.py"
+                path: "bud_datasets.py"
+              - key: "eval_config.py"
+                path: "eval_config.py"
               - key: "metadata.json"
                 path: "metadata.json"
         - name: cache-volume

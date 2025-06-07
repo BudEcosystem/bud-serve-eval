@@ -120,16 +120,34 @@ class ConfigMapManager:
 
             dataset_content = OpenCompassConfigGenerator.generate_dataset_config(datasets)
 
-            # Create complete evaluation config
-            eval_config_content = f"""# Complete evaluation configuration
-from mmengine.config import read_base
+            # Create simple, self-contained evaluation config
+            eval_config_content = f"""# Complete evaluation configuration for {eval_request_id}
+from opencompass.models import OpenAI
 
-with read_base():
-    from .bud_model import models
-    from .bud_datasets import datasets
+# Model configuration
+models = [
+    dict(
+        abbr='{model_name}',
+        type=OpenAI,
+        path='{model_name}',
+        key='{api_key}',
+        query_per_second=1,
+        max_out_len=2048,
+        max_seq_len=4096,
+        openai_api_base='{base_url}',
+        batch_size=8,
+        temperature=0.0,
+        run_cfg=dict(num_gpus=0),
+        retry=3,
+    ),
+]
+
+# Dataset configuration - use simple string names that OpenCompass recognizes
+datasets = [{', '.join([f"'{dataset}_gen'" for dataset in datasets])}]
 
 # Configuration metadata
 eval_request_id = '{eval_request_id}'
+work_dir = '/workspace/outputs'
 """
 
             # ConfigMap name
@@ -148,9 +166,9 @@ eval_request_id = '{eval_request_id}'
                     },
                 ),
                 data={
-                    "bud-model.py": bud_model_content,
-                    "bud-datasets.py": dataset_content,
-                    "eval-config.py": eval_config_content,
+                    "bud_model.py": bud_model_content,
+                    "bud_datasets.py": dataset_content,
+                    "eval_config.py": eval_config_content,
                     "metadata.json": json.dumps(
                         {
                             "eval_request_id": eval_request_id,

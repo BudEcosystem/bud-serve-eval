@@ -62,10 +62,10 @@ eval_metadata = {{
 """
 
         # Add timestamp
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        timestamp = datetime.utcnow().isoformat() + "Z"
-        config_content = config_content.format(timestamp)
+        timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        config_content = config_content.replace("{{}}", timestamp)
 
         logger.info(f"Generated bud-model.py config for model: {model_name}")
         return config_content
@@ -80,40 +80,22 @@ eval_metadata = {{
         Returns:
             str: The dataset configuration content
         """
-        # For now, use a default set of datasets
-        # This can be expanded to support custom dataset selection
-        dataset_imports = []
+        # Simple dataset configuration that works with OpenCompass
+        # We'll use the _gen suffix for generation-based evaluation
         dataset_list = []
-
-        # Map common dataset names to their import paths
-        dataset_mapping = {
-            "mmlu": "from .datasets.mmlu.mmlu_gen import mmlu_datasets",
-            "gsm8k": "from .datasets.gsm8k.gsm8k_gen import gsm8k_datasets",
-            "hellaswag": "from .datasets.hellaswag.hellaswag_gen import hellaswag_datasets",
-            "arc": "from .datasets.ARC_c.ARC_c_gen import ARC_c_datasets",
-            "winogrande": "from .datasets.winogrande.winogrande_gen import winogrande_datasets",
-        }
-
+        
         for dataset in datasets:
-            if dataset.lower() in dataset_mapping:
-                dataset_imports.append(dataset_mapping[dataset.lower()])
-                dataset_list.append(f"{dataset.lower()}_datasets")
-
-        # Default to basic datasets if none specified
-        if not dataset_imports:
-            dataset_imports = [
-                "from .datasets.mmlu.mmlu_gen import mmlu_datasets",
-                "from .datasets.gsm8k.gsm8k_gen import gsm8k_datasets",
-            ]
-            dataset_list = ["mmlu_datasets", "gsm8k_datasets"]
+            dataset_name = dataset.lower()
+            # Add _gen suffix if not already present
+            if not dataset_name.endswith('_gen'):
+                dataset_name = f"{dataset_name}_gen"
+            dataset_list.append(f"'{dataset_name}'")
 
         config_content = f"""# Dataset configuration
-from mmengine.config import read_base
+from opencompass.datasets import *
 
-with read_base():
-    {chr(10).join(f"    {imp}" for imp in dataset_imports)}
-
-datasets = [*{", *".join(dataset_list)}]
+# Use predefined dataset configurations
+datasets = [{', '.join(dataset_list)}]
 """
 
         return config_content
