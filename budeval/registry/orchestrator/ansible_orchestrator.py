@@ -208,13 +208,15 @@ class AnsibleOrchestrator:
         uuid: str,
         kubeconfig: Optional[str],
         namespace: str = "budeval",
+        eval_request_id: Optional[str] = None,
     ):
-        """Clean up job resources including volumes.
+        """Clean up job resources including volumes and ConfigMaps.
 
         Args:
             uuid: Unique identifier for the job.
             kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
             namespace: Kubernetes namespace. Defaults to "budeval".
+            eval_request_id: Optional evaluation request ID for ConfigMap cleanup.
         """
         playbook = "cleanup_job_resources_k8s.yml"
 
@@ -245,6 +247,17 @@ class AnsibleOrchestrator:
         try:
             self._run_ansible_playbook(playbook, uuid, files, extravars)
             logger.info(f"Successfully cleaned up resources for job {uuid}")
+            
+            # Also cleanup ConfigMap if eval_request_id is provided
+            if eval_request_id:
+                try:
+                    from budeval.evals.configmap_manager import ConfigMapManager
+                    configmap_manager = ConfigMapManager(namespace=namespace)
+                    configmap_manager.delete_opencompass_config_map(eval_request_id, kubeconfig)
+                    logger.info(f"Successfully cleaned up ConfigMap for eval request {eval_request_id}")
+                except Exception as configmap_e:
+                    logger.warning(f"ConfigMap cleanup failed for {eval_request_id}: {configmap_e}")
+                    
         except Exception as e:
             logger.error(f"Failed to cleanup resources for job {uuid}: {e}", exc_info=True)
             raise e
@@ -599,6 +612,11 @@ spec:
         self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int
     ) -> str:
         safe_args = json.dumps(args)
+        
+        # Extract eval_request_id for ConfigMap mounting
+        eval_request_id = args.get("eval_request_id", uuid)
+        configmap_name = f"opencompass-config-{eval_request_id.lower()}"
+        
         return f"""apiVersion: batch/v1
 kind: Job
 metadata:
@@ -614,6 +632,8 @@ spec:
           env:
             - name: ENGINE_ARGS
               value: '{safe_args}'
+            - name: OPENCOMPASS_CONFIG_PATH
+              value: '/configs'
           volumeMounts:
             - name: data-volume
               mountPath: /data
@@ -621,6 +641,9 @@ spec:
               mountPath: /output
             - name: eval-datasets
               mountPath: /datasets
+              readOnly: true
+            - name: opencompass-config
+              mountPath: /configs
               readOnly: true
           workingDir: /workspace
       volumes:
@@ -635,6 +658,18 @@ spec:
             claimName: eval-datasets-pvc
             # Note: This PVC must exist in the same namespace as the job
             # The eval-datasets PVC should be created in the job's namespace
+        - name: opencompass-config
+          configMap:
+            name: {configmap_name}
+            items:
+              - key: "bud-model.py"
+                path: "bud-model.py"
+              - key: "bud-datasets.py"
+                path: "bud-datasets.py"
+              - key: "eval-config.py"
+                path: "eval-config.py"
+              - key: "metadata.json"
+                path: "metadata.json"
       restartPolicy: Never
   backoffLimit: 1
 """

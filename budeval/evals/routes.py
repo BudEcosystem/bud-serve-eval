@@ -221,3 +221,108 @@ async def test_deploy_job(request: dict):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to deploy test job: {str(e)}") from e
+
+
+@evals_routes.post("/test-configmap")
+async def test_create_configmap(request: dict):
+    """Test endpoint to create OpenCompass ConfigMap with provided payload.
+
+    Args:
+        request (dict): The test request payload with model configuration.
+
+    Returns:
+        dict: ConfigMap creation result
+    """
+    try:
+        from budeval.evals.configmap_manager import ConfigMapManager
+        
+        # Extract parameters from request
+        eval_request_id = request.get("eval_request_id", "test-123")
+        model_name = request.get("model_name", "test-model")
+        api_key = request.get("api_key", "test-key")
+        base_url = request.get("base_url", "http://localhost:8000/v1")
+        datasets = request.get("datasets", ["mmlu", "gsm8k"])
+        kubeconfig = request.get("kubeconfig")
+        
+        # Create ConfigMap
+        configmap_manager = ConfigMapManager(namespace="budeval")
+        result = configmap_manager.create_opencompass_config_map(
+            eval_request_id=eval_request_id,
+            model_name=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            datasets=datasets,
+            kubeconfig=kubeconfig,
+        )
+        
+        return {
+            "status": "success",
+            "message": "ConfigMap created successfully",
+            "data": result
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ConfigMap: {str(e)}") from e
+
+
+@evals_routes.get("/configmap/{eval_request_id}")
+async def get_configmap_info(eval_request_id: str, kubeconfig: str = None):
+    """Get information about a ConfigMap for an evaluation request.
+
+    Args:
+        eval_request_id (str): The evaluation request ID.
+        kubeconfig (str): Optional kubeconfig content.
+
+    Returns:
+        dict: ConfigMap information
+    """
+    try:
+        from budeval.evals.configmap_manager import ConfigMapManager
+        
+        configmap_manager = ConfigMapManager(namespace="budeval")
+        result = configmap_manager.get_configmap_info(eval_request_id, kubeconfig)
+        
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"ConfigMap not found for eval request: {eval_request_id}")
+        
+        return {
+            "status": "success",
+            "data": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get ConfigMap info: {str(e)}") from e
+
+
+@evals_routes.delete("/configmap/{eval_request_id}")
+async def delete_configmap(eval_request_id: str, kubeconfig: str = None):
+    """Delete ConfigMap for an evaluation request.
+
+    Args:
+        eval_request_id (str): The evaluation request ID.
+        kubeconfig (str): Optional kubeconfig content.
+
+    Returns:
+        dict: Deletion result
+    """
+    try:
+        from budeval.evals.configmap_manager import ConfigMapManager
+        
+        configmap_manager = ConfigMapManager(namespace="budeval")
+        success = configmap_manager.delete_opencompass_config_map(eval_request_id, kubeconfig)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"ConfigMap deleted successfully for eval request: {eval_request_id}"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Failed to delete ConfigMap for eval request: {eval_request_id}"
+            }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete ConfigMap: {str(e)}") from e

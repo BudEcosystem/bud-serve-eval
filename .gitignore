@@ -60,3 +60,13 @@ Debug/
 
 # Screts
 secrets.json
+.claude
+.ruff_cache
+.repomixignore
+app.yaml
+CLAUDE.md
+notes.txt
+k3s.yaml
+repomix.config.json
+TASK_PROGRESS.md
+test_configmap.sh

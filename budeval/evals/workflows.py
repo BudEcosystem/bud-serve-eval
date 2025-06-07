@@ -44,6 +44,61 @@ class EvaluationWorkflow:
     # Activities
     @dapr_workflows.register_activity
     @staticmethod
+    def create_opencompass_config(
+        ctx: wf.WorkflowActivityContext,
+        evaluate_model_request: str,
+    ) -> dict:
+        """Create OpenCompass configuration ConfigMap.
+
+        Args:
+            ctx (WorkflowActivityContext): The context of the Dapr workflow
+            evaluate_model_request (str): A JSON string containing the evaluate model request parameters
+        """
+        logger = logging.getLogger("::EVAL:: Create OpenCompass Config")
+        logger.debug(f"Creating OpenCompass config for {evaluate_model_request}")
+
+        workflow_id = ctx.workflow_id
+        task_id = ctx.task_id
+
+        evaluate_model_request_json = StartEvaluationRequest.model_validate_json(evaluate_model_request)
+        
+        response: Union[SuccessResponse, ErrorResponse]
+        try:
+            from .configmap_manager import ConfigMapManager
+            
+            configmap_manager = ConfigMapManager(namespace="budeval")
+            
+            # Create ConfigMap with dynamic configuration
+            configmap_result = configmap_manager.create_opencompass_config_map(
+                eval_request_id=str(evaluate_model_request_json.eval_request_id),
+                model_name=evaluate_model_request_json.model_name,
+                api_key=evaluate_model_request_json.api_key,
+                base_url=evaluate_model_request_json.base_url,
+                datasets=["mmlu", "gsm8k"],  # TODO: Make this configurable from request
+                kubeconfig=evaluate_model_request_json.kubeconfig,
+                # Additional parameters can be added here
+                max_out_len=2048,
+                max_seq_len=4096,
+                batch_size=8,
+                query_per_second=1,
+                temperature=0.0,
+            )
+
+            logger.info(f"Created OpenCompass ConfigMap: {configmap_result['configmap_name']}")
+            response = SuccessResponse(
+                message="OpenCompass configuration created successfully", 
+                param=configmap_result
+            )
+        except Exception as e:
+            logger.error(f"Error creating OpenCompass config: {e}", exc_info=True)
+            response = ErrorResponse(
+                message="Error creating OpenCompass configuration", 
+                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+            )
+        return response.model_dump(mode="json")
+
+    @dapr_workflows.register_activity
+    @staticmethod
     def deploy_eval_job(
         ctx: wf.WorkflowActivityContext,
         evaluate_model_request: str,
@@ -306,6 +361,47 @@ class EvaluationWorkflow:
             target_name=evaluate_model_request_json.source,
         )
 
+        # Create OpenCompass Configuration
+        logger.info("Creating OpenCompass configuration")
+        create_config_result = yield ctx.call_activity(
+            EvaluationWorkflow.create_opencompass_config,
+            input=evaluate_model_request_json.model_dump_json(),
+        )
+
+        logger.debug(f"OpenCompass Configuration Creation Result: {create_config_result}")
+
+        if create_config_result.get("code", HTTPStatus.OK.value) != HTTPStatus.OK.value:
+            logger.error(f"OpenCompass Configuration Creation Failed: {create_config_result.get('message')}")
+            # notify that config creation failed
+            notification_req.payload.event = "create_opencompass_config"
+            notification_req.payload.content = NotificationContent(
+                title="Configuration creation failed",
+                message=create_config_result["message"],
+                status=WorkflowStatus.FAILED,
+            )
+            dapr_workflows.publish_notification(
+                workflow_id=instance_id,
+                notification=notification_req,
+                target_topic_name=evaluate_model_request_json.source_topic,
+                target_name=evaluate_model_request_json.source,
+            )
+            return
+
+        # notify that config creation is successful
+        notification_req.payload.event = "create_opencompass_config"
+        configmap_name = create_config_result.get("param", {}).get("configmap_name", "configuration")
+        notification_req.payload.content = NotificationContent(
+            title="Configuration created successfully",
+            message=f"OpenCompass configuration '{configmap_name}' created for model {evaluate_model_request_json.model_name}",
+            status=WorkflowStatus.COMPLETED,
+        )
+        dapr_workflows.publish_notification(
+            workflow_id=instance_id,
+            notification=notification_req,
+            target_topic_name=evaluate_model_request_json.source_topic,
+            target_name=evaluate_model_request_json.source,
+        )
+
         # Deploy Evaluation Job
         deploy_eval_job_result = yield ctx.call_activity(
             EvaluationWorkflow.deploy_eval_job,
@@ -558,6 +654,11 @@ class EvaluationWorkflow:
                 id="verify_cluster_connection",
                 title="Verifying Cluster Connection",
                 description="Verify if the cluster is reachable",
+            ),
+            WorkflowStep(
+                id="create_opencompass_config",
+                title="Creating OpenCompass Configuration",
+                description="Create ConfigMap with dynamic OpenCompass model configuration",
             ),
             WorkflowStep(
                 id="deploy_eval_job",
