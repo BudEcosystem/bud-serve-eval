@@ -136,7 +136,6 @@ class AnsibleOrchestrator:
         docker_image: str,
         namespace: str = "budeval",
         ttl_seconds: int = 600,
-        data_volume_size: str = "10Gi",
         output_volume_size: str = "5Gi",
     ):
         """Run a job with persistent volumes using the specified runner type.
@@ -149,7 +148,6 @@ class AnsibleOrchestrator:
             docker_image: Docker image to use for the job.
             namespace: Kubernetes namespace to deploy the job in. Defaults to "budeval".
             ttl_seconds: Time-to-live in seconds for the job after completion. Defaults to 600.
-            data_volume_size: Size of the data persistent volume. Defaults to "10Gi".
             output_volume_size: Size of the output persistent volume. Defaults to "5Gi".
 
         Raises:
@@ -162,23 +160,18 @@ class AnsibleOrchestrator:
         if not playbook:
             raise ValueError(f"Unsupported runner_type: {runner_type}")
 
-        # Generate YAML manifests for PVCs and Job (dynamic provisioning via PVCs)
-        pvc_data_yaml = self._render_persistent_volume_claim_yaml(
-            f"{uuid}-data-pvc", f"{uuid}-data-pv", data_volume_size, namespace
-        )
+        # Generate YAML manifests for output PVC and Job (shared datasets use eval-datasets-pvc)
         pvc_output_yaml = self._render_persistent_volume_claim_yaml(
             f"{uuid}-output-pvc", f"{uuid}-output-pv", output_volume_size, namespace
         )
         job_yaml = self._render_job_with_volumes_yaml(uuid, docker_image, engine_args, namespace, ttl_seconds)
 
         files = {
-            "pvc-data.yaml": pvc_data_yaml,
             "pvc-output.yaml": pvc_output_yaml,
             "job.yaml": job_yaml,
         }
         extravars = {
             "job_name": uuid,
-            "pvc_data_template_path": "pvc-data.yaml",
             "pvc_output_template_path": "pvc-output.yaml",
             "job_template_path": "job.yaml",
             "namespace": namespace,
@@ -586,7 +579,7 @@ spec:
   # No hostPath specified
 """
 
-    def _render_persistent_volume_claim_yaml(self, name: str, pv_name: str, size: str, namespace: str) -> str:
+    def _render_persistent_volume_claim_yaml(self, name: str, _pv_name: str, size: str, namespace: str) -> str:
         # Render a PVC using environment-aware configuration for job-specific volumes
         from budeval.commons.storage_config import StorageConfig
 
@@ -635,31 +628,28 @@ spec:
             - name: ENGINE_ARGS
               value: '{safe_args}'
             - name: OPENCOMPASS_CONFIG_PATH
-              value: '/configs'
+              value: '/workspace/configs'
           volumeMounts:
-            - name: data-volume
-              mountPath: /data
-            - name: output-volume
-              mountPath: /output
             - name: eval-datasets
-              mountPath: /datasets
+              mountPath: /workspace/data
               readOnly: true
+            - name: output-volume
+              mountPath: /workspace/outputs
             - name: opencompass-config
-              mountPath: /configs
+              mountPath: /workspace/configs
               readOnly: true
+            - name: cache-volume
+              mountPath: /workspace/cache
           workingDir: /workspace
       volumes:
-        - name: data-volume
-          persistentVolumeClaim:
-            claimName: {uuid}-data-pvc
-        - name: output-volume
-          persistentVolumeClaim:
-            claimName: {uuid}-output-pvc
         - name: eval-datasets
           persistentVolumeClaim:
             claimName: eval-datasets-pvc
             # Note: This PVC must exist in the same namespace as the job
             # The eval-datasets PVC should be created in the job's namespace
+        - name: output-volume
+          persistentVolumeClaim:
+            claimName: {uuid}-output-pvc
         - name: opencompass-config
           configMap:
             name: {configmap_name}
@@ -672,6 +662,8 @@ spec:
                 path: "eval-config.py"
               - key: "metadata.json"
                 path: "metadata.json"
+        - name: cache-volume
+          emptyDir: {{}}
       restartPolicy: Never
   backoffLimit: 1
 """

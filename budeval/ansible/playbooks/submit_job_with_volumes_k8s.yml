@@ -15,13 +15,6 @@
         state: present
         kubeconfig: "{{ kubeconfig_path | default(omit) }}"
 
-    - name: Create data persistent volume claim
-      community.kubernetes.k8s:
-        state: present
-        definition: "{{ lookup('file', pvc_data_template_path) | from_yaml }}"
-        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
-        namespace: "{{ namespace }}"
-
     - name: Create output persistent volume claim
       community.kubernetes.k8s:
         state: present
@@ -62,5 +55,7 @@
         msg: |
           Job {{ job_name }} has been deployed successfully.
           Status: {{ job_status.resources[0].status | default('Unknown') }}
-          Data Volume: {{ job_name }}-data-pvc mounted at /data
-          Output Volume: {{ job_name }}-output-pvc mounted at /output 
+          Datasets: eval-datasets-pvc mounted at /workspace/data (read-only)
+          Output Volume: {{ job_name }}-output-pvc mounted at /workspace/outputs
+          Cache: emptyDir mounted at /workspace/cache
+          Configs: ConfigMap mounted at /workspace/configs (read-only) 

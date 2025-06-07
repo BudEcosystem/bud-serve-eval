@@ -70,7 +70,9 @@ class EvaluationOpsService:
             logger.info(f"Engine arguments prepared: {engine_args}")
 
             # Deploy job with volumes
-            logger.info("Deploying job with volumes - Data: 100Gi, Output: 50Gi")
+            logger.info(
+                "Deploying job with volumes - Shared datasets at /workspace/data, Output: 10Gi at /workspace/outputs"
+            )
             ansible_orchestrator.run_job_with_volumes(
                 runner_type="kubernetes",
                 uuid=job_uuid,
@@ -79,7 +81,6 @@ class EvaluationOpsService:
                 docker_image=engine_metadata.docker_image_url,
                 namespace="budeval",
                 ttl_seconds=3600,  # 1 hour TTL
-                data_volume_size="10Gi",  # Testing
                 output_volume_size="10Gi",  # Testing
             )
 
