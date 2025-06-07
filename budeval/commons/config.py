@@ -33,6 +33,11 @@ class AppConfig(BaseAppConfig):
     # Base Directory
     base_dir: DirectoryPath = Path(__file__).parent.parent.parent.resolve()
 
+    # Dataset Configuration
+    opencompass_dataset_url: str = (
+        "https://github.com/open-compass/opencompass/releases/download/0.2.2.rc1/OpenCompassData-complete-20240207.zip"
+    )
+
 
 class SecretsConfig(BaseSecretsConfig):
     name: str = __version__.split("@")[0]

@@ -1,7 +1,7 @@
-import sys
 import json
 import os
 import shutil
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -11,6 +11,7 @@ import ansible_runner
 import yaml
 
 from budeval.commons.logging import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -247,17 +248,18 @@ class AnsibleOrchestrator:
         try:
             self._run_ansible_playbook(playbook, uuid, files, extravars)
             logger.info(f"Successfully cleaned up resources for job {uuid}")
-            
+
             # Also cleanup ConfigMap if eval_request_id is provided
             if eval_request_id:
                 try:
                     from budeval.evals.configmap_manager import ConfigMapManager
+
                     configmap_manager = ConfigMapManager(namespace=namespace)
                     configmap_manager.delete_opencompass_config_map(eval_request_id, kubeconfig)
                     logger.info(f"Successfully cleaned up ConfigMap for eval request {eval_request_id}")
                 except Exception as configmap_e:
                     logger.warning(f"ConfigMap cleanup failed for {eval_request_id}: {configmap_e}")
-                    
+
         except Exception as e:
             logger.error(f"Failed to cleanup resources for job {uuid}: {e}", exc_info=True)
             raise e
@@ -612,11 +614,11 @@ spec:
         self, uuid: str, docker_image: str, args: Dict[str, Any], namespace: str, ttl: int
     ) -> str:
         safe_args = json.dumps(args)
-        
+
         # Extract eval_request_id for ConfigMap mounting
         eval_request_id = args.get("eval_request_id", uuid)
         configmap_name = f"opencompass-config-{eval_request_id.lower()}"
-        
+
         return f"""apiVersion: batch/v1
 kind: Job
 metadata:

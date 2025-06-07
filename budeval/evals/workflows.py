@@ -61,13 +61,13 @@ class EvaluationWorkflow:
         task_id = ctx.task_id
 
         evaluate_model_request_json = StartEvaluationRequest.model_validate_json(evaluate_model_request)
-        
+
         response: Union[SuccessResponse, ErrorResponse]
         try:
             from .configmap_manager import ConfigMapManager
-            
+
             configmap_manager = ConfigMapManager(namespace="budeval")
-            
+
             # Create ConfigMap with dynamic configuration
             configmap_result = configmap_manager.create_opencompass_config_map(
                 eval_request_id=str(evaluate_model_request_json.eval_request_id),
@@ -86,14 +86,12 @@ class EvaluationWorkflow:
 
             logger.info(f"Created OpenCompass ConfigMap: {configmap_result['configmap_name']}")
             response = SuccessResponse(
-                message="OpenCompass configuration created successfully", 
-                param=configmap_result
+                message="OpenCompass configuration created successfully", param=configmap_result
             )
         except Exception as e:
             logger.error(f"Error creating OpenCompass config: {e}", exc_info=True)
             response = ErrorResponse(
-                message="Error creating OpenCompass configuration", 
-                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+                message="Error creating OpenCompass configuration", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
         return response.model_dump(mode="json")
 

@@ -1,13 +1,15 @@
 """Kubernetes ConfigMap manager for OpenCompass configurations."""
 
-import base64
 import json
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 from budeval.commons.logging import logging
+
 from .config_generator import OpenCompassConfigGenerator
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,31 +19,32 @@ class ConfigMapManager:
 
     def __init__(self, namespace: str = "budeval"):
         """Initialize ConfigMap manager.
-        
+
         Args:
             namespace: Kubernetes namespace to use
         """
         self.namespace = namespace
         self.api_client = None
-    
+
     def _get_k8s_client(self, kubeconfig: Optional[str] = None) -> client.CoreV1Api:
         """Get Kubernetes API client.
-        
+
         Args:
             kubeconfig: Optional kubeconfig content
-            
+
         Returns:
             Kubernetes CoreV1Api client
         """
         if self.api_client:
             return self.api_client
-        
+
         try:
             if kubeconfig:
                 # Load kubeconfig from string
                 import tempfile
+
                 import yaml
-                
+
                 # Parse kubeconfig
                 if isinstance(kubeconfig, str):
                     try:
@@ -54,17 +57,18 @@ class ConfigMapManager:
                             raise ValueError("Invalid kubeconfig format")
                 else:
                     kubeconfig_dict = kubeconfig
-                
+
                 # Write to temporary file
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                     yaml.dump(kubeconfig_dict, f)
                     temp_kubeconfig_path = f.name
-                
+
                 # Load config from file
                 config.load_kube_config(config_file=temp_kubeconfig_path)
-                
+
                 # Clean up temporary file
                 import os
+
                 os.unlink(temp_kubeconfig_path)
             else:
                 # Try in-cluster config first, then local config
@@ -74,14 +78,14 @@ class ConfigMapManager:
                 except config.ConfigException:
                     config.load_kube_config()
                     logger.info("Using local Kubernetes configuration")
-            
+
             self.api_client = client.CoreV1Api()
             return self.api_client
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize Kubernetes client: {e}")
             raise
-    
+
     def create_opencompass_config_map(
         self,
         eval_request_id: str,
@@ -90,10 +94,10 @@ class ConfigMapManager:
         base_url: str,
         datasets: list[str],
         kubeconfig: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create ConfigMap with OpenCompass configuration.
-        
+
         Args:
             eval_request_id: Unique evaluation request ID
             model_name: Model name
@@ -102,26 +106,22 @@ class ConfigMapManager:
             datasets: List of datasets to evaluate
             kubeconfig: Optional kubeconfig content
             **kwargs: Additional configuration parameters
-            
+
         Returns:
             Dict with ConfigMap creation details
         """
         try:
             k8s_client = self._get_k8s_client(kubeconfig)
-            
+
             # Generate configuration content
             bud_model_content = OpenCompassConfigGenerator.generate_bud_model_config(
-                model_name=model_name,
-                api_key=api_key,
-                base_url=base_url,
-                eval_request_id=eval_request_id,
-                **kwargs
+                model_name=model_name, api_key=api_key, base_url=base_url, eval_request_id=eval_request_id, **kwargs
             )
-            
+
             dataset_content = OpenCompassConfigGenerator.generate_dataset_config(datasets)
-            
+
             # Create complete evaluation config
-            eval_config_content = f'''# Complete evaluation configuration
+            eval_config_content = f"""# Complete evaluation configuration
 from mmengine.config import read_base
 
 with read_base():
@@ -130,11 +130,11 @@ with read_base():
 
 # Configuration metadata
 eval_request_id = '{eval_request_id}'
-'''
-            
+"""
+
             # ConfigMap name
             configmap_name = f"opencompass-config-{eval_request_id.lower()}"
-            
+
             # Create ConfigMap object
             configmap = client.V1ConfigMap(
                 metadata=client.V1ObjectMeta(
@@ -145,45 +145,43 @@ eval_request_id = '{eval_request_id}'
                         "component": "opencompass-config",
                         "eval-request-id": eval_request_id.lower(),
                         "model": model_name.lower().replace("/", "-").replace("_", "-"),
-                    }
+                    },
                 ),
                 data={
                     "bud-model.py": bud_model_content,
                     "bud-datasets.py": dataset_content,
                     "eval-config.py": eval_config_content,
-                    "metadata.json": json.dumps({
-                        "eval_request_id": eval_request_id,
-                        "model_name": model_name,
-                        "api_key_hash": hash(api_key),  # Store hash for verification
-                        "base_url": base_url,
-                        "datasets": datasets,
-                        "created_at": f"{__import__('datetime').datetime.utcnow().isoformat()}Z",
-                    }, indent=2)
-                }
+                    "metadata.json": json.dumps(
+                        {
+                            "eval_request_id": eval_request_id,
+                            "model_name": model_name,
+                            "api_key_hash": hash(api_key),  # Store hash for verification
+                            "base_url": base_url,
+                            "datasets": datasets,
+                            "created_at": f"{__import__('datetime').datetime.utcnow().isoformat()}Z",
+                        },
+                        indent=2,
+                    ),
+                },
             )
-            
+
             # Create or update ConfigMap
             try:
                 # Try to create new ConfigMap
-                result = k8s_client.create_namespaced_config_map(
-                    namespace=self.namespace,
-                    body=configmap
-                )
+                result = k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
                 logger.info(f"Created ConfigMap {configmap_name} in namespace {self.namespace}")
                 action = "created"
             except ApiException as e:
                 if e.status == 409:  # Already exists
                     # Update existing ConfigMap
                     result = k8s_client.patch_namespaced_config_map(
-                        name=configmap_name,
-                        namespace=self.namespace,
-                        body=configmap
+                        name=configmap_name, namespace=self.namespace, body=configmap
                     )
                     logger.info(f"Updated existing ConfigMap {configmap_name} in namespace {self.namespace}")
                     action = "updated"
                 else:
                     raise
-            
+
             return {
                 "configmap_name": configmap_name,
                 "namespace": self.namespace,
@@ -194,39 +192,32 @@ eval_request_id = '{eval_request_id}'
                     "model_name": model_name,
                     "base_url": base_url,
                     "datasets": datasets,
-                }
+                },
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to create ConfigMap for eval request {eval_request_id}: {e}")
             raise
-    
-    def delete_opencompass_config_map(
-        self,
-        eval_request_id: str,
-        kubeconfig: Optional[str] = None
-    ) -> bool:
+
+    def delete_opencompass_config_map(self, eval_request_id: str, kubeconfig: Optional[str] = None) -> bool:
         """Delete ConfigMap for an evaluation request.
-        
+
         Args:
             eval_request_id: Evaluation request ID
             kubeconfig: Optional kubeconfig content
-            
+
         Returns:
             bool: True if deleted successfully
         """
         try:
             k8s_client = self._get_k8s_client(kubeconfig)
             configmap_name = f"opencompass-config-{eval_request_id.lower()}"
-            
-            k8s_client.delete_namespaced_config_map(
-                name=configmap_name,
-                namespace=self.namespace
-            )
-            
+
+            k8s_client.delete_namespaced_config_map(name=configmap_name, namespace=self.namespace)
+
             logger.info(f"Deleted ConfigMap {configmap_name} from namespace {self.namespace}")
             return True
-            
+
         except ApiException as e:
             if e.status == 404:
                 logger.warning(f"ConfigMap for eval request {eval_request_id} not found")
@@ -237,33 +228,26 @@ eval_request_id = '{eval_request_id}'
         except Exception as e:
             logger.error(f"Failed to delete ConfigMap for eval request {eval_request_id}: {e}")
             return False
-    
-    def get_configmap_info(
-        self,
-        eval_request_id: str,
-        kubeconfig: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+
+    def get_configmap_info(self, eval_request_id: str, kubeconfig: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get information about a ConfigMap.
-        
+
         Args:
             eval_request_id: Evaluation request ID
             kubeconfig: Optional kubeconfig content
-            
+
         Returns:
             Dict with ConfigMap info or None if not found
         """
         try:
             k8s_client = self._get_k8s_client(kubeconfig)
             configmap_name = f"opencompass-config-{eval_request_id.lower()}"
-            
-            configmap = k8s_client.read_namespaced_config_map(
-                name=configmap_name,
-                namespace=self.namespace
-            )
-            
+
+            configmap = k8s_client.read_namespaced_config_map(name=configmap_name, namespace=self.namespace)
+
             metadata_json = configmap.data.get("metadata.json", "{}")
             metadata = json.loads(metadata_json)
-            
+
             return {
                 "name": configmap.metadata.name,
                 "namespace": configmap.metadata.namespace,
@@ -272,7 +256,7 @@ eval_request_id = '{eval_request_id}'
                 "files": list(configmap.data.keys()),
                 "metadata": metadata,
             }
-            
+
         except ApiException as e:
             if e.status == 404:
                 return None
@@ -281,4 +265,4 @@ eval_request_id = '{eval_request_id}'
                 raise
         except Exception as e:
             logger.error(f"Failed to get ConfigMap info for eval request {eval_request_id}: {e}")
-            raise 
+            raise

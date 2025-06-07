@@ -70,7 +70,7 @@ class EvaluationOpsService:
             logger.info(f"Engine arguments prepared: {engine_args}")
 
             # Deploy job with volumes
-            logger.info(f"Deploying job with volumes - Data: 100Gi, Output: 50Gi")
+            logger.info("Deploying job with volumes - Data: 100Gi, Output: 50Gi")
             ansible_orchestrator.run_job_with_volumes(
                 runner_type="kubernetes",
                 uuid=job_uuid,

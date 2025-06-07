@@ -6,6 +6,7 @@ from typing import Optional
 from budeval.commons.logging import logging
 from budeval.registry.orchestrator.ansible_orchestrator import AnsibleOrchestrator
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +51,7 @@ class VolumeInitializer:
             extravars = {}
 
             # Get storage configuration based on environment
+            from budeval.commons.config import app_settings
             from budeval.commons.storage_config import StorageConfig
 
             storage_config = StorageConfig.get_eval_datasets_config()
@@ -63,9 +65,17 @@ class VolumeInitializer:
             extravars["volume_size"] = storage_config["size"]
             extravars["storage_class"] = storage_config.get("storage_class", "")
 
+            # Set dataset URL from configuration
+            extravars["opencompass_dataset_url"] = app_settings.opencompass_dataset_url
+            # Extract filename from URL
+            import os
+
+            extravars["opencompass_dataset_filename"] = os.path.basename(app_settings.opencompass_dataset_url)
+
             # Handle kubeconfig same as other methods
             if kubeconfig:
                 import json
+
                 import yaml
 
                 logger.info("Using provided kubeconfig")
@@ -83,7 +93,7 @@ class VolumeInitializer:
 
             # Verify that dataset is actually initialized before marking as complete
             await self._verify_dataset_initialization()
-            
+
             # Mark as initialized only after verification
             VolumeInitializer._initialized = True
 
@@ -95,36 +105,49 @@ class VolumeInitializer:
         """Verify that the dataset has been properly initialized by checking for the marker file."""
         import asyncio
         import subprocess
-        
+
         logger.info("Verifying dataset initialization...")
-        
+
         max_retries = 10
         retry_delay = 30  # seconds
-        
+
         for attempt in range(max_retries):
             try:
                 # Use kubectl to check if the dataset_initialized file exists
-                result = subprocess.run([
-                    "kubectl", "run", "dataset-verify", "-n", "budeval",
-                    "--rm", "-i", "--restart=Never", "--image=busybox",
-                    "--overrides", '{"spec":{"containers":[{"name":"dataset-verify","volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"eval-datasets-pvc"}}]}}',
-                    "--", "sh", "-c", 
-                    "test -f /data/dataset_initialized && echo 'INITIALIZED' || echo 'NOT_INITIALIZED'"
-                ], 
-                capture_output=True, 
-                text=True,
-                timeout=60
+                result = subprocess.run(
+                    [
+                        "kubectl",
+                        "run",
+                        "dataset-verify",
+                        "-n",
+                        "budeval",
+                        "--rm",
+                        "-i",
+                        "--restart=Never",
+                        "--image=busybox",
+                        "--overrides",
+                        '{"spec":{"containers":[{"name":"dataset-verify","volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"eval-datasets-pvc"}}]}}',
+                        "--",
+                        "sh",
+                        "-c",
+                        "test -f /data/dataset_initialized && echo 'INITIALIZED' || echo 'NOT_INITIALIZED'",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
-                
+
                 if result.returncode == 0 and "INITIALIZED" in result.stdout:
                     logger.info("Dataset initialization verified successfully")
                     return
                 elif attempt < max_retries - 1:
-                    logger.info(f"Dataset not yet initialized (attempt {attempt + 1}/{max_retries}), waiting {retry_delay} seconds...")
+                    logger.info(
+                        f"Dataset not yet initialized (attempt {attempt + 1}/{max_retries}), waiting {retry_delay} seconds..."
+                    )
                     await asyncio.sleep(retry_delay)
                 else:
                     logger.warning("Dataset initialization could not be verified after maximum retries")
-                    
+
             except subprocess.TimeoutExpired:
                 logger.warning(f"Verification timeout on attempt {attempt + 1}")
                 if attempt < max_retries - 1:
