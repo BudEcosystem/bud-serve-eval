@@ -683,10 +683,10 @@ spec:
           configMap:
             name: {configmap_name}
             items:
-              - key: "bud_model.py"
-                path: "bud_model.py"
-              - key: "bud_datasets.py"
-                path: "bud_datasets.py"
+              - key: "bud-model.py"
+                path: "bud-model.py"
+              - key: "bud-datasets.py"
+                path: "bud-datasets.py"
               - key: "eval_config.py"
                 path: "eval_config.py"
               - key: "metadata.json"

@@ -194,8 +194,8 @@ work_dir = '/workspace/outputs'
                     },
                 ),
                 data={
-                    "bud_model.py": bud_model_content,
-                    "bud_datasets.py": dataset_content,
+                    "bud-model.py": bud_model_content,
+                    "bud-datasets.py": dataset_content,
                     "eval_config.py": eval_config_content,
                     "metadata.json": json.dumps(
                         {

@@ -11,7 +11,7 @@ class OpenCompassConfigGenerator:
 
     @staticmethod
     def generate_bud_model_config(model_name: str, api_key: str, base_url: str, eval_request_id: str, **kwargs) -> str:
-        """Generate bud-model.py content with actual payload data.
+        """Generate bud-model.py content with actual payload data using OpenCompass format.
 
         Args:
             model_name: The model name/path
@@ -28,16 +28,12 @@ class OpenCompassConfigGenerator:
         max_seq_len = kwargs.get("max_seq_len", 4096)
         batch_size = kwargs.get("batch_size", 8)
         query_per_second = kwargs.get("query_per_second", 1)
-        temperature = kwargs.get("temperature", 0.0)
 
-        config_content = f"""# OpenCompass model configuration for evaluation request: {eval_request_id}
-# Generated automatically - do not edit manually
-
-from opencompass.models import OpenAI
+        config_content = f"""from opencompass.models import OpenAI
 
 models = [
     dict(
-        abbr='{model_name}',
+        abbr='{eval_request_id}',
         type=OpenAI,
         path='{model_name}',
         key='{api_key}',
@@ -45,27 +41,9 @@ models = [
         max_out_len={max_out_len},
         max_seq_len={max_seq_len},
         openai_api_base='{base_url}',
-        batch_size={batch_size},
-        temperature={temperature},
-        run_cfg=dict(num_gpus=0),
-        retry=3,
-    ),
+        batch_size={batch_size}),
 ]
-
-# Evaluation metadata
-eval_metadata = {{
-    'eval_request_id': '{eval_request_id}',
-    'model_name': '{model_name}',
-    'base_url': '{base_url}',
-    'generated_at': '{{}}',
-}}
 """
-
-        # Add timestamp
-        from datetime import datetime, timezone
-
-        timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        config_content = config_content.replace("{{}}", timestamp)
 
         logger.info(f"Generated bud-model.py config for model: {model_name}")
         return config_content
@@ -83,7 +61,6 @@ eval_metadata = {{
         # Simple dataset configuration that works with OpenCompass
         # We'll use the _gen suffix for generation-based evaluation
         dataset_list = []
-        
         for dataset in datasets:
             dataset_name = dataset.lower()
             # Add _gen suffix if not already present
