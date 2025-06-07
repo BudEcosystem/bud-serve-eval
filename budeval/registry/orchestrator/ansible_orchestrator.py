@@ -660,6 +660,7 @@ spec:
           volumeMounts:
             - name: eval-datasets
               mountPath: /workspace/data
+              subPath: data
               readOnly: true
             - name: output-volume
               mountPath: /workspace/outputs
