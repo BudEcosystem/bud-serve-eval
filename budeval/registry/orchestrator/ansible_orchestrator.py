@@ -617,17 +617,13 @@ spec:
         datasets_with_gen = [f"{dataset}_gen" for dataset in datasets]
         datasets_arg = " ".join(datasets_with_gen)
 
-        # Extract model configuration for CLI
-        model_name = args.get("model_name", "test-model")
-        api_key = args.get("api_key", "")
-        base_url = args.get("base_url", "")
+        # Model configuration is now handled via bud-model.py config file
 
-        # Create OpenCompass CLI arguments - use CLI mode for better compatibility  
+        # Create OpenCompass CLI arguments - use config file mode with bud-model
         run_args = [
             "run.py",
-            "--datasets", "mmlu_gen",
-            "--hf-type", "chat", 
-            "--hf-path", model_name,
+            "--models", "bud-model",
+            "--datasets", datasets_arg,
             "--work-dir", "/workspace/outputs",
             "--debug"
         ]
