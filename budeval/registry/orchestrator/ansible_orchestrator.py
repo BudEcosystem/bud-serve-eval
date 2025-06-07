@@ -622,13 +622,14 @@ spec:
         api_key = args.get("api_key", "")
         base_url = args.get("base_url", "")
 
-        # Create OpenCompass CLI arguments
-        # For API models, we need to use config files, not CLI args
+        # Create OpenCompass CLI arguments - use CLI mode for better compatibility  
         run_args = [
             "run.py",
-            "/workspace/configs/eval_config.py",
-            "--work-dir",
-            "/workspace/outputs",
+            "--datasets", "mmlu_gen",
+            "--hf-type", "chat", 
+            "--hf-path", model_name,
+            "--work-dir", "/workspace/outputs",
+            "--debug"
         ]
 
         return f"""apiVersion: batch/v1
