@@ -4,14 +4,22 @@ from uuid import UUID
 from budmicroframe.commons.schemas import CloudEventBase
 from pydantic import BaseModel, Field
 
+from budeval.core.schemas import EvaluationEngine
+
 
 class EvaluationRequest(CloudEventBase):
     """Schema for evaluation request."""
 
     eval_request_id: UUID = Field(..., description="Unique identifier for the evaluation request")
+    engine: EvaluationEngine = Field(
+        EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
+    )
     model_name: str = Field(..., description="Name of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
     base_url: str = Field(..., description="Base URL for the model API")
+    datasets: Optional[List[str]] = Field(
+        None, description="List of datasets to evaluate on (defaults to engine-specific defaults)"
+    )
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
@@ -20,9 +28,11 @@ class EvaluationRequest(CloudEventBase):
         json_schema_extra = {
             "example": {
                 "eval_request_id": "123e4567-e89b-12d3-a456-426614174000",
+                "engine": "opencompass",
                 "model_name": "gpt-4",
                 "api_key": "sk-...",
                 "base_url": "https://api.openai.com/v1",
+                "datasets": ["mmlu", "gsm8k"],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }
         }
@@ -33,9 +43,15 @@ class StartEvaluationRequest(CloudEventBase):
     """Schema for start evaluation request."""
 
     eval_request_id: UUID = Field(..., description="Unique identifier for the evaluation request")
+    engine: EvaluationEngine = Field(
+        EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
+    )
     model_name: str = Field(..., description="Name of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
     base_url: str = Field(..., description="Base URL for the model API")
+    datasets: Optional[List[str]] = Field(
+        None, description="List of datasets to evaluate on (defaults to engine-specific defaults)"
+    )
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
@@ -44,9 +60,11 @@ class StartEvaluationRequest(CloudEventBase):
         json_schema_extra = {
             "example": {
                 "eval_request_id": "123e4567-e89b-12d3-a456-426614174000",
+                "engine": "opencompass",
                 "model_name": "gpt-4",
                 "api_key": "sk-...",
                 "base_url": "https://api.openai.com/v1",
+                "datasets": ["mmlu", "gsm8k"],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }
         }

@@ -98,6 +98,49 @@ class EvaluationOpsService:
             raise e
 
     @classmethod
+    async def deploy_eval_job_with_transformation(
+        cls, evaluate_model_request: DeployEvalJobRequest, transformed_data: dict, task_id: str, workflow_id: str
+    ) -> dict:
+        """Deploy evaluation job using transformed configuration data."""
+        logger.info(f"Deploying evaluation job with transformation for workflow_id: {workflow_id} and task_id: {task_id}")
+
+        try:
+            from budeval.registry.orchestrator.ansible_orchestrator import AnsibleOrchestrator
+
+            # Initialize Ansible orchestrator
+            ansible_orchestrator = AnsibleOrchestrator()
+
+            # Extract job configuration from transformed data
+            job_config = transformed_data.get("job_config", {})
+            job_uuid = job_config.get("job_id", f"eval-{evaluate_model_request.eval_request_id}")
+            
+            logger.info(f"Creating job with UUID: {job_uuid}")
+            logger.info(f"Using engine: {job_config.get('engine')}, Docker image: {job_config.get('image')}")
+
+            # Deploy job with transformed configuration
+            logger.info("Deploying job with transformed configuration and volumes")
+            ansible_orchestrator.run_job_with_generic_config(
+                runner_type="kubernetes",
+                uuid=job_uuid,
+                kubeconfig=evaluate_model_request.kubeconfig,
+                job_config=job_config,
+                namespace="budeval",
+            )
+
+            logger.info(f"Successfully deployed evaluation job {job_uuid}")
+            return {
+                "job_id": job_uuid,
+                "status": "deployed",
+                "namespace": "budeval",
+                "engine": job_config.get("engine"),
+                "output_volume": job_config.get("output_volume", {}).get("claimName"),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to deploy evaluation job with transformation: {e}", exc_info=True)
+            raise e
+
+    @classmethod
     async def get_job_status(cls, job_id: str, kubeconfig: Optional[str], namespace: str = "budeval") -> dict:
         """Get the status of a deployed evaluation job."""
         logger.info(f"Getting status for job: {job_id}")

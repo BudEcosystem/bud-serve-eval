@@ -19,6 +19,14 @@ from budmicroframe.shared.dapr_workflow import DaprWorkflow
 
 from budeval.commons.logging import logging
 from budeval.commons.utils import check_workflow_status_in_statestore, update_workflow_data_in_statestore
+from budeval.core.schemas import (
+    DatasetCategory,
+    GenericDatasetConfig,
+    GenericEvaluationRequest,
+    GenericModelConfig,
+    ModelType,
+)
+from budeval.core.transformers.registry import TransformerRegistry
 from budeval.evals.schemas import DeployEvalJobRequest, StartEvaluationRequest
 from budeval.evals.services import EvaluationOpsService
 
@@ -44,18 +52,18 @@ class EvaluationWorkflow:
     # Activities
     @dapr_workflows.register_activity
     @staticmethod
-    def create_opencompass_config(
+    def create_engine_config(
         ctx: wf.WorkflowActivityContext,
         evaluate_model_request: str,
     ) -> dict:
-        """Create OpenCompass configuration ConfigMap.
+        """Create engine-specific configuration using transformers.
 
         Args:
             ctx (WorkflowActivityContext): The context of the Dapr workflow
             evaluate_model_request (str): A JSON string containing the evaluate model request parameters
         """
-        logger = logging.getLogger("::EVAL:: Create OpenCompass Config")
-        logger.debug(f"Creating OpenCompass config for {evaluate_model_request}")
+        logger = logging.getLogger("::EVAL:: Create Engine Config")
+        logger.debug(f"Creating engine config for {evaluate_model_request}")
 
         workflow_id = ctx.workflow_id
         task_id = ctx.task_id
@@ -64,34 +72,62 @@ class EvaluationWorkflow:
 
         response: Union[SuccessResponse, ErrorResponse]
         try:
-            from .configmap_manager import ConfigMapManager
-
-            configmap_manager = ConfigMapManager(namespace="budeval")
-
-            # Create ConfigMap with dynamic configuration
-            configmap_result = configmap_manager.create_opencompass_config_map(
-                eval_request_id=str(evaluate_model_request_json.eval_request_id),
-                model_name=evaluate_model_request_json.model_name,
-                api_key=evaluate_model_request_json.api_key,
-                base_url=evaluate_model_request_json.base_url,
-                datasets=["mmlu", "gsm8k"],  # TODO: Make this configurable from request
-                kubeconfig=evaluate_model_request_json.kubeconfig,
-                # Additional parameters can be added here
-                max_out_len=2048,
-                max_seq_len=4096,
+            # Convert to generic evaluation request
+            generic_request = GenericEvaluationRequest(
+                eval_request_id=evaluate_model_request_json.eval_request_id,
+                engine=evaluate_model_request_json.engine,
+                model=GenericModelConfig(
+                    name=evaluate_model_request_json.model_name,
+                    type=ModelType.API,
+                    api_key=evaluate_model_request_json.api_key,
+                    base_url=evaluate_model_request_json.base_url,
+                    temperature=0.0,
+                    max_tokens=2048,
+                ),
+                datasets=[
+                    GenericDatasetConfig(
+                        name=dataset,
+                        category=DatasetCategory.CUSTOM,
+                        split="test",
+                    )
+                    for dataset in (evaluate_model_request_json.datasets or ["mmlu", "gsm8k"])
+                ],
                 batch_size=8,
-                query_per_second=1,
-                temperature=0.0,
+                num_workers=1,
+                timeout_minutes=30,
+                kubeconfig=evaluate_model_request_json.kubeconfig,
+                namespace="budeval",
             )
 
-            logger.info(f"Created OpenCompass ConfigMap: {configmap_result['configmap_name']}")
+            # Get the appropriate transformer
+            transformer = TransformerRegistry.get_transformer(generic_request.engine)
+            
+            # Transform the request
+            transformed = transformer.transform_request(generic_request)
+            
+            # Create ConfigMap with transformed configuration
+            from .configmap_manager import ConfigMapManager
+            configmap_manager = ConfigMapManager(namespace="budeval")
+            
+            configmap_result = configmap_manager.create_generic_config_map(
+                eval_request_id=str(generic_request.eval_request_id),
+                engine=generic_request.engine.value,
+                config_files=transformed.config_files,
+                kubeconfig=evaluate_model_request_json.kubeconfig,
+            )
+
+            logger.info(f"Created {generic_request.engine.value} ConfigMap: {configmap_result['configmap_name']}")
             response = SuccessResponse(
-                message="OpenCompass configuration created successfully", param=configmap_result
+                message=f"{generic_request.engine.value} configuration created successfully",
+                param={
+                    **configmap_result,
+                    "transformed_data": transformed.model_dump(mode="json"),
+                }
             )
         except Exception as e:
-            logger.error(f"Error creating OpenCompass config: {e}", exc_info=True)
+            logger.error(f"Error creating engine config: {e}", exc_info=True)
             response = ErrorResponse(
-                message="Error creating OpenCompass configuration", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+                message="Error creating engine configuration", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
         return response.model_dump(mode="json")
 
@@ -99,37 +135,49 @@ class EvaluationWorkflow:
     @staticmethod
     def deploy_eval_job(
         ctx: wf.WorkflowActivityContext,
-        evaluate_model_request: str,
+        deploy_request: str,
     ) -> dict:
-        """Deploy the evaluation job.
+        """Deploy the evaluation job using transformed configuration.
 
         Args:
             ctx (WorkflowActivityContext): The context of the Dapr workflow, providing
                 access to workflow instance information.
-            evaluate_model_request (str): A JSON string containing the evaluate model request parameters
-                including model name, API key, and cluster configuration.
+            deploy_request (str): A JSON string containing the deployment request with transformed data.
         """
         logger = logging.getLogger("::EVAL:: Eval Deployment Job")
-        logger.debug(f"Deploying evaluation job for {evaluate_model_request}")
+        logger.debug(f"Deploying evaluation job with request: {deploy_request}")
 
         workflow_id = ctx.workflow_id
         task_id = ctx.task_id
 
-        evaluate_model_request_json = StartEvaluationRequest.model_validate_json(evaluate_model_request)
+        deploy_request_json = json.loads(deploy_request)
+        
+        # Extract the original request and transformed data
+        evaluate_model_request_json = StartEvaluationRequest.model_validate_json(
+            deploy_request_json["evaluate_model_request"]
+        )
+        transformed_data = deploy_request_json["transformed_data"]
+        
+        # Create deployment payload with engine from request
         payload = DeployEvalJobRequest(
-            engine="OpenCompass",
+            engine=evaluate_model_request_json.engine.value,
             eval_request_id=str(evaluate_model_request_json.eval_request_id),
             api_key=evaluate_model_request_json.api_key,
             base_url=evaluate_model_request_json.base_url,
             kubeconfig=evaluate_model_request_json.kubeconfig,
-            dataset=["dataset1"],  # TODO: Make this from the request
+            dataset=evaluate_model_request_json.datasets or ["mmlu", "gsm8k"],
         )
 
-        logger.debug(f"Deploying evaluation job for {payload}")
+        logger.debug(f"Deploying evaluation job for engine: {payload.engine}")
 
         response: Union[SuccessResponse, ErrorResponse]
         try:
-            job_details = asyncio.run(EvaluationOpsService.deploy_eval_job(payload, task_id, workflow_id))
+            # Pass transformed data to the service
+            job_details = asyncio.run(
+                EvaluationOpsService.deploy_eval_job_with_transformation(
+                    payload, transformed_data, task_id, workflow_id
+                )
+            )
 
             response = SuccessResponse(message="Evaluation job deployed successfully", param=dict(job_details))
         except Exception as e:
@@ -359,19 +407,19 @@ class EvaluationWorkflow:
             target_name=evaluate_model_request_json.source,
         )
 
-        # Create OpenCompass Configuration
-        logger.info("Creating OpenCompass configuration")
+        # Create Engine Configuration
+        logger.info(f"Creating {evaluate_model_request_json.engine.value} configuration")
         create_config_result = yield ctx.call_activity(
-            EvaluationWorkflow.create_opencompass_config,
+            EvaluationWorkflow.create_engine_config,
             input=evaluate_model_request_json.model_dump_json(),
         )
 
-        logger.debug(f"OpenCompass Configuration Creation Result: {create_config_result}")
+        logger.debug(f"Engine Configuration Creation Result: {create_config_result}")
 
         if create_config_result.get("code", HTTPStatus.OK.value) != HTTPStatus.OK.value:
-            logger.error(f"OpenCompass Configuration Creation Failed: {create_config_result.get('message')}")
+            logger.error(f"Engine Configuration Creation Failed: {create_config_result.get('message')}")
             # notify that config creation failed
-            notification_req.payload.event = "create_opencompass_config"
+            notification_req.payload.event = "create_engine_config"
             notification_req.payload.content = NotificationContent(
                 title="Configuration creation failed",
                 message=create_config_result["message"],
@@ -386,11 +434,12 @@ class EvaluationWorkflow:
             return
 
         # notify that config creation is successful
-        notification_req.payload.event = "create_opencompass_config"
+        notification_req.payload.event = "create_engine_config"
         configmap_name = create_config_result.get("param", {}).get("configmap_name", "configuration")
+        engine_name = evaluate_model_request_json.engine.value
         notification_req.payload.content = NotificationContent(
             title="Configuration created successfully",
-            message=f"OpenCompass configuration '{configmap_name}' created for model {evaluate_model_request_json.model_name}",
+            message=f"{engine_name} configuration '{configmap_name}' created for model {evaluate_model_request_json.model_name}",
             status=WorkflowStatus.COMPLETED,
         )
         dapr_workflows.publish_notification(
@@ -400,10 +449,14 @@ class EvaluationWorkflow:
             target_name=evaluate_model_request_json.source,
         )
 
-        # Deploy Evaluation Job
+        # Deploy Evaluation Job with transformed data
+        deploy_request = {
+            "evaluate_model_request": evaluate_model_request_json.model_dump_json(),
+            "transformed_data": create_config_result.get("param", {}).get("transformed_data", {}),
+        }
         deploy_eval_job_result = yield ctx.call_activity(
             EvaluationWorkflow.deploy_eval_job,
-            input=evaluate_model_request_json.model_dump_json(),
+            input=json.dumps(deploy_request),
         )
 
         logger.debug(f"Deploy Evaluation Job Result: {deploy_eval_job_result}")

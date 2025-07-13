@@ -197,6 +197,80 @@ class AnsibleOrchestrator:
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
+    def run_job_with_generic_config(
+        self,
+        runner_type: str,
+        uuid: str,
+        kubeconfig: Optional[str],
+        job_config: Dict[str, Any],
+        namespace: str = "budeval",
+    ):
+        """Run a job using generic configuration from transformer.
+
+        Args:
+            runner_type: Type of runner to use (e.g., "kubernetes").
+            uuid: Unique identifier for the job.
+            kubeconfig: Kubernetes configuration as a JSON string (optional, uses in-cluster config if not provided).
+            job_config: Generic job configuration from transformer containing:
+                - image: Docker image
+                - command: Container command
+                - args: Command arguments
+                - env_vars: Environment variables
+                - config_volume: Configuration volume details
+                - data_volumes: Data volume mounts
+                - output_volume: Output volume details
+                - cpu_request, cpu_limit, memory_request, memory_limit: Resource limits
+                - ttl_seconds: TTL after completion
+            namespace: Kubernetes namespace to deploy the job in. Defaults to "budeval".
+
+        Raises:
+            ValueError: If the specified runner_type is not supported.
+        """
+        playbook_map = {
+            "kubernetes": "submit_job_with_volumes_k8s.yml",
+        }
+        playbook = playbook_map.get(runner_type.lower())
+        if not playbook:
+            raise ValueError(f"Unsupported runner_type: {runner_type}")
+
+        # Generate YAML manifests from generic config
+        output_volume = job_config.get("output_volume", {})
+        pvc_output_yaml = self._render_persistent_volume_claim_yaml(
+            output_volume.get("claimName", f"{uuid}-output-pvc"),
+            f"{uuid}-output-pv",
+            output_volume.get("size", "10Gi"),
+            namespace
+        )
+        
+        job_yaml = self._render_generic_job_yaml(uuid, job_config, namespace)
+
+        files = {
+            "pvc-output.yaml": pvc_output_yaml,
+            "job.yaml": job_yaml,
+        }
+        extravars = {
+            "job_name": uuid,
+            "pvc_output_template_path": "pvc-output.yaml",
+            "job_template_path": "job.yaml",
+            "namespace": namespace,
+        }
+
+        # Handle kubeconfig
+        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
+                kubeconfig_yaml_content = f.read()
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        elif kubeconfig:
+            kubeconfig_dict = json.loads(kubeconfig)
+            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
+            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
+            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
+        else:
+            extravars["use_in_cluster_config"] = True
+
+        self._run_ansible_playbook(playbook, uuid, files, extravars)
+
     def cleanup_job_resources(
         self,
         uuid: str,
@@ -698,4 +772,125 @@ spec:
           emptyDir: {{}}
       restartPolicy: Never
   backoffLimit: 1
+"""
+
+    def _render_generic_job_yaml(self, uuid: str, job_config: Dict[str, Any], namespace: str) -> str:
+        """Render a generic job YAML from transformer configuration.
+        
+        Args:
+            uuid: Job unique identifier
+            job_config: Generic job configuration from transformer
+            namespace: Kubernetes namespace
+            
+        Returns:
+            Kubernetes Job YAML as string
+        """
+        # Extract configuration
+        image = job_config.get("image")
+        command = job_config.get("command", [])
+        args = job_config.get("args", [])
+        env_vars = job_config.get("env_vars", {})
+        config_volume = job_config.get("config_volume", {})
+        data_volumes = job_config.get("data_volumes", [])
+        output_volume = job_config.get("output_volume", {})
+        ttl = job_config.get("ttl_seconds", 3600)
+        
+        # Resources
+        cpu_request = job_config.get("cpu_request", "500m")
+        cpu_limit = job_config.get("cpu_limit", "2000m")
+        memory_request = job_config.get("memory_request", "1Gi")
+        memory_limit = job_config.get("memory_limit", "4Gi")
+        
+        # Build environment variables section
+        env_section = ""
+        if env_vars:
+            env_list = []
+            for key, value in env_vars.items():
+                env_list.append(f"""            - name: {key}
+              value: '{value}'""")
+            env_section = "\n".join(env_list)
+        
+        # Build volume mounts section
+        volume_mounts = []
+        volumes = []
+        
+        # Config volume
+        if config_volume:
+            volume_mounts.append(f"""            - name: config
+              mountPath: /workspace/configs
+              readOnly: true""")
+            
+            volumes.append(f"""        - name: config
+          configMap:
+            name: {config_volume['configMapName']}""")
+        
+        # Data volumes (e.g., shared datasets)
+        for i, vol in enumerate(data_volumes):
+            vol_name = vol.get("name", f"data-{i}")
+            volume_mounts.append(f"""            - name: {vol_name}
+              mountPath: {vol['mountPath']}
+              readOnly: {str(vol.get('readOnly', True)).lower()}""")
+            
+            if vol.get("claimName"):
+                volumes.append(f"""        - name: {vol_name}
+          persistentVolumeClaim:
+            claimName: {vol['claimName']}""")
+            elif vol.get("type") == "emptyDir":
+                volumes.append(f"""        - name: {vol_name}
+          emptyDir: {{}}""")
+        
+        # Output volume
+        if output_volume:
+            volume_mounts.append(f"""            - name: output
+              mountPath: /workspace/outputs""")
+            
+            volumes.append(f"""        - name: output
+          persistentVolumeClaim:
+            claimName: {output_volume['claimName']}""")
+        
+        volume_mounts_str = "\n".join(volume_mounts) if volume_mounts else ""
+        volumes_str = "\n".join(volumes) if volumes else ""
+        
+        # Format command and args
+        if isinstance(command, list) and len(command) == 2 and command[0] == "/bin/bash" and command[1] == "-c":
+            # Special handling for bash scripts
+            command_str = json.dumps(command)
+            args_str = json.dumps(args)
+        else:
+            command_str = json.dumps(command) if command else '[]'
+            args_str = json.dumps(args) if args else '[]'
+        
+        return f"""apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {uuid}
+  namespace: {namespace}
+  labels:
+    app: budeval
+    engine: {job_config.get('engine', 'unknown')}
+spec:
+  ttlSecondsAfterFinished: {ttl}
+  template:
+    spec:
+      containers:
+        - name: engine
+          image: {image}
+          command: {command_str}
+          args: {args_str}
+{f'''          env:
+{env_section}''' if env_section else ''}
+{f'''          volumeMounts:
+{volume_mounts_str}''' if volume_mounts_str else ''}
+          resources:
+            requests:
+              cpu: {cpu_request}
+              memory: {memory_request}
+            limits:
+              cpu: {cpu_limit}
+              memory: {memory_limit}
+          workingDir: /workspace
+{f'''      volumes:
+{volumes_str}''' if volumes_str else ''}
+      restartPolicy: Never
+  backoffLimit: {job_config.get('backoff_limit', 2)}
 """

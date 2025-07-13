@@ -245,6 +245,83 @@ work_dir = '/workspace/outputs'
             logger.error(f"Failed to create ConfigMap for eval request {eval_request_id}: {e}")
             raise
 
+    def create_generic_config_map(
+        self,
+        eval_request_id: str,
+        engine: str,
+        config_files: Dict[str, str],
+        kubeconfig: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create ConfigMap with engine-specific configuration files.
+
+        Args:
+            eval_request_id: Unique evaluation request ID
+            engine: Engine name (e.g., 'opencompass', 'deepeval')
+            config_files: Dictionary mapping filename to file content
+            kubeconfig: Optional kubeconfig content
+            **kwargs: Additional metadata
+
+        Returns:
+            Dict with ConfigMap creation details
+        """
+        try:
+            k8s_client = self._get_k8s_client(kubeconfig)
+
+            # ConfigMap name format: {engine}-config-{eval_request_id}
+            configmap_name = f"{engine.lower()}-config-{eval_request_id.lower()}"
+
+            # Create ConfigMap object
+            configmap = client.V1ConfigMap(
+                api_version="v1",
+                kind="ConfigMap",
+                metadata=client.V1ObjectMeta(
+                    name=configmap_name,
+                    namespace=self.namespace,
+                    labels={
+                        "app": "budeval",
+                        "type": "evaluation-config",
+                        "engine": engine.lower(),
+                        "eval-request-id": eval_request_id.lower(),
+                    },
+                ),
+                data=config_files,
+            )
+
+            # Create or update ConfigMap
+            try:
+                # Try to create new ConfigMap
+                result = k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
+                logger.info(f"Created ConfigMap {configmap_name} in namespace {self.namespace}")
+                action = "created"
+            except ApiException as e:
+                if e.status == 409:  # Already exists
+                    # Update existing ConfigMap
+                    result = k8s_client.patch_namespaced_config_map(
+                        name=configmap_name, namespace=self.namespace, body=configmap
+                    )
+                    logger.info(f"Updated existing ConfigMap {configmap_name} in namespace {self.namespace}")
+                    action = "updated"
+                else:
+                    raise
+
+            return {
+                "configmap_name": configmap_name,
+                "namespace": self.namespace,
+                "action": action,
+                "files": list(configmap.data.keys()),
+                "engine": engine,
+                "metadata": {
+                    "eval_request_id": eval_request_id,
+                    "engine": engine,
+                    **kwargs,
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to create ConfigMap for eval request {eval_request_id}: {e}")
+            raise
+
     def delete_opencompass_config_map(self, eval_request_id: str, kubeconfig: Optional[str] = None) -> bool:
         """Delete ConfigMap for an evaluation request.
 
