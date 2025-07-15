@@ -17,22 +17,23 @@
 """The main entry point for the application, initializing the FastAPI app and setting up the application's lifespan management, including configuration and secret syncs."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from budmicroframe.commons import logging
 from budmicroframe.main import configure_app, schedule_secrets_and_config_sync
 from budmicroframe.shared.dapr_workflow import DaprWorkflow
+from budmicroframe.shared.psql_service import Database
 from fastapi import FastAPI
 
 from .commons.config import app_settings, secrets_settings
 from .commons.exceptions import SeederException
+from .evals.eval_sync import get_manifest_cache
+from .evals.eval_sync.routes import router as eval_sync_router
 from .evals.routes import evals_routes
 
 
 # from .seeders import seeders
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -59,13 +60,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         logger.info("Starting background initialization on startup")
 
+        # Initialize database connection
+        logger.info("Initializing database connection")
+        db = Database()
+        db.connect()
+        logger.info("Database connection initialized successfully")
+
+        # Initialize eval dataset manifest cache if enabled
+        if app_settings.eval_sync_enabled:
+            logger.info("Initializing evaluation dataset manifest cache")
+            try:
+                manifest_cache = await get_manifest_cache()
+                manifest = await manifest_cache.get_manifest()
+
+                total_datasets = sum(collection.count for collection in manifest.datasets.values())
+                logger.info(
+                    f"Evaluation dataset manifest cache initialized successfully. "
+                    f"Version: {manifest.version_info.current_version}, "
+                    f"Datasets: {total_datasets}, Traits: {manifest.traits.count}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize eval dataset manifest cache: {e}")
+
         volume_init = VolumeInitializer()
 
         logger.info("Creating background task for volume initialization")
-        volume_task = asyncio.create_task(volume_init.ensure_eval_datasets_volume())
+
+        _ = asyncio.create_task(volume_init.ensure_eval_datasets_volume())
 
         logger.info("Background initialization tasks started successfully")
-
         logger.info("Prepared dataset successfully.")
     except SeederException as e:
         logger.error("Failed to prepare dataset. Error: %s", e.message)
@@ -75,39 +98,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     try:
-        task.cancel()
+        # Shutdown eval manifest cache
+        if app_settings.eval_sync_enabled:
+            try:
+                manifest_cache = await get_manifest_cache()
+                await manifest_cache.shutdown()
+                logger.info("Evaluation dataset manifest cache shutdown complete")
+            except Exception as e:
+                logger.error(f"Error shutting down eval manifest cache: {e}")
+
+        _ = task.cancel()
     except asyncio.CancelledError:
         logger.exception("Failed to cleanup config & store sync.")
 
     DaprWorkflow().shutdown_workflow_runtime()
 
 
-app = configure_app(app_settings, secrets_settings, lifespan=lifespan)
-
-# @app.on_event("startup")  # TODO: change -> https://github.com/BudEcosystem/bud-connect/blob/main/budconnect/main.py
-# async def startup_event():
-#     """Initialize volumes and preload engines on startup in the background."""
-#     try:
-#         from .evals.volume_init import VolumeInitializer
-#         # from .evals.engine_preloader import EnginePreloader
-
-#         logger.info("Starting background initialization on startup")
-
-#         # Initialize volume initializer and engine preloader
-#         volume_init = VolumeInitializer()
-#         # engine_preloader = EnginePreloader()
-
-#         # Create background tasks for both volume initialization and engine preloading
-#         logger.info("Creating background task for volume initialization")
-#         volume_task = asyncio.create_task(volume_init.ensure_eval_datasets_volume())
-
-#         logger.info("Creating background task for engine preloading")
-#         # engine_task = asyncio.create_task(engine_preloader.preload_all_engines())
-
-#         logger.info("Background initialization tasks started successfully")
-
-#     except Exception as e:
-#         logger.error(f"Failed to start background initialization: {e}", exc_info=True)
-
+app = configure_app(app_settings, secrets_settings, lifespan=lifespan)  # type: ignore[arg-type] # noqa: F841
 
 app.include_router(evals_routes)
+app.include_router(eval_sync_router)

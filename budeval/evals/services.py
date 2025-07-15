@@ -113,7 +113,7 @@ class EvaluationOpsService:
             # Extract job configuration from transformed data
             job_config = transformed_data.get("job_config", {})
             job_uuid = job_config.get("job_id", f"eval-{evaluate_model_request.eval_request_id}")
-            
+
             logger.info(f"Creating job with UUID: {job_uuid}")
             logger.info(f"Using engine: {job_config.get('engine')}, Docker image: {job_config.get('image')}")
 
@@ -204,11 +204,11 @@ class EvaluationService:
 
         response: Union[WorkflowMetadataResponse, ErrorResponse]
 
-        from .workflows import EvaluationWorkflow
+        from .workflows import EvaluationWorkflow # Avoid Circular Import
 
         try:
             response = await EvaluationWorkflow().__call__(evaluate_model_request)
         except Exception as e:
             logger.error(f"Error evaluating model: {e}", exc_info=True)
-            raise ErrorResponse(message=f"Error evaluating model: {e}") from e
+            return ErrorResponse(message=f"Error evaluating model: {e}")
         return response

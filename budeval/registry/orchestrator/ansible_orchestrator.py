@@ -36,11 +36,16 @@ class AnsibleOrchestrator:
         if not self._playbook_dir.exists():
             raise FileNotFoundError(f"Ansible playbook directory not found: {self._playbook_dir}")
 
-    def verify_cluster_connection(self, kubeconfig: Optional[str] = None) -> bool:
-        """Verify cluster connection using an Ansible playbook via a kubeconfig in JSON form."""
-        temp_id = f"verify-{uuid.uuid4().hex}"
-        playbook = "verify_cluster_k8s.yml"
+    def _parse_kubeconfig(self, kubeconfig: Optional[str], temp_id: str) -> tuple[dict, dict]:
+        """Parse kubeconfig and return files and extravars.
 
+        Args:
+            kubeconfig: Kubernetes configuration as JSON string or None
+            temp_id: Temporary ID for file naming
+
+        Returns:
+            Tuple of (files dict, extravars dict)
+        """
         files = {}
         extravars = {}
 
@@ -53,17 +58,38 @@ class AnsibleOrchestrator:
             files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml_content}
             extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
         elif kubeconfig:
-            # 1) Parse the incoming JSON string into a Python dict
-            kubeconfig_dict = json.loads(kubeconfig)
+            try:
+                # 1) Parse the incoming JSON string into a Python dict
+                kubeconfig_dict = json.loads(kubeconfig)
 
-            # 2) Dump that dict out as YAML
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
+                # 2) Dump that dict out as YAML
+                kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
 
-            files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml}
-            extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+                files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml}
+                extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid kubeconfig JSON provided: {e}. Falling back to local k3s.yaml if available.")
+                # Fall back to local k3s.yaml if available
+                if Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
+                    with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
+                        kubeconfig_yaml_content = f.read()
+                    files = {f"{temp_id}_kubeconfig.yaml": kubeconfig_yaml_content}
+                    extravars = {"kubeconfig_path": f"{temp_id}_kubeconfig.yaml"}
+                else:
+                    # Use in-cluster config as last resort
+                    extravars = {"use_in_cluster_config": True}
         else:
             # Use in-cluster config - don't pass kubeconfig_path
             extravars = {"use_in_cluster_config": True}
+
+        return files, extravars
+
+    def verify_cluster_connection(self, kubeconfig: Optional[str] = None) -> bool:
+        """Verify cluster connection using an Ansible playbook via a kubeconfig in JSON form."""
+        temp_id = f"verify-{uuid.uuid4().hex}"
+        playbook = "verify_cluster_k8s.yml"
+
+        files, extravars = self._parse_kubeconfig(kubeconfig, temp_id)
 
         try:
             self._run_ansible_playbook(playbook, temp_id, files, extravars)
@@ -115,15 +141,10 @@ class AnsibleOrchestrator:
             "namespace": namespace,
         }
 
-        if kubeconfig:
-            # Parse and convert kubeconfig if provided
-            kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        else:
-            # Use in-cluster config
-            extravars["use_in_cluster_config"] = True
+        # Handle kubeconfig
+        kube_files, kube_extravars = self._parse_kubeconfig(kubeconfig, uuid)
+        files.update(kube_files)
+        extravars.update(kube_extravars)
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
@@ -177,23 +198,10 @@ class AnsibleOrchestrator:
             "namespace": namespace,
         }
 
-        # For Testing: Load from local yaml file if no kubeconfig provided
-        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
-            # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
-                kubeconfig_yaml_content = f.read()
-            # Since it's already YAML, we don't need to parse/convert it
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        elif kubeconfig:
-            # Parse and convert kubeconfig if provided
-            kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        else:
-            # Use in-cluster config
-            extravars["use_in_cluster_config"] = True
+        # Handle kubeconfig
+        kube_files, kube_extravars = self._parse_kubeconfig(kubeconfig, uuid)
+        files.update(kube_files)
+        extravars.update(kube_extravars)
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
@@ -241,7 +249,7 @@ class AnsibleOrchestrator:
             output_volume.get("size", "10Gi"),
             namespace
         )
-        
+
         job_yaml = self._render_generic_job_yaml(uuid, job_config, namespace)
 
         files = {
@@ -256,18 +264,9 @@ class AnsibleOrchestrator:
         }
 
         # Handle kubeconfig
-        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
-                kubeconfig_yaml_content = f.read()
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        elif kubeconfig:
-            kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        else:
-            extravars["use_in_cluster_config"] = True
+        kube_files, kube_extravars = self._parse_kubeconfig(kubeconfig, uuid)
+        files.update(kube_files)
+        extravars.update(kube_extravars)
 
         self._run_ansible_playbook(playbook, uuid, files, extravars)
 
@@ -294,23 +293,10 @@ class AnsibleOrchestrator:
             "namespace": namespace,
         }
 
-        # For Testing: Load from local yaml file if no kubeconfig provided
-        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
-            # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
-                kubeconfig_yaml_content = f.read()
-            # Since it's already YAML, we don't need to parse/convert it
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        elif kubeconfig:
-            # Parse and convert kubeconfig if provided
-            kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        else:
-            # Use in-cluster config
-            extravars["use_in_cluster_config"] = True
+        # Handle kubeconfig
+        kube_files, kube_extravars = self._parse_kubeconfig(kubeconfig, uuid)
+        files.update(kube_files)
+        extravars.update(kube_extravars)
 
         try:
             self._run_ansible_playbook(playbook, uuid, files, extravars)
@@ -355,23 +341,10 @@ class AnsibleOrchestrator:
             "namespace": namespace,
         }
 
-        # For Testing: Load from local yaml file if no kubeconfig provided
-        if kubeconfig is None and Path("/home/ubuntu/bud-serve-eval/k3s.yaml").exists():
-            # Read the local k3s.yaml file
-            with open("/home/ubuntu/bud-serve-eval/k3s.yaml", "r") as f:
-                kubeconfig_yaml_content = f.read()
-            # Since it's already YAML, we don't need to parse/convert it
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml_content
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        elif kubeconfig:
-            # Parse and convert kubeconfig if provided
-            kubeconfig_dict = json.loads(kubeconfig)
-            kubeconfig_yaml = yaml.safe_dump(kubeconfig_dict, sort_keys=False, default_flow_style=False)
-            files[f"{uuid}_kubeconfig.yaml"] = kubeconfig_yaml
-            extravars["kubeconfig_path"] = f"{uuid}_kubeconfig.yaml"
-        else:
-            # Use in-cluster config
-            extravars["use_in_cluster_config"] = True
+        # Handle kubeconfig
+        kube_files, kube_extravars = self._parse_kubeconfig(kubeconfig, uuid)
+        files.update(kube_files)
+        extravars.update(kube_extravars)
 
         try:
             result = self._run_ansible_playbook_with_output(playbook, uuid, files, extravars)
@@ -776,12 +749,12 @@ spec:
 
     def _render_generic_job_yaml(self, uuid: str, job_config: Dict[str, Any], namespace: str) -> str:
         """Render a generic job YAML from transformer configuration.
-        
+
         Args:
             uuid: Job unique identifier
             job_config: Generic job configuration from transformer
             namespace: Kubernetes namespace
-            
+
         Returns:
             Kubernetes Job YAML as string
         """
@@ -794,13 +767,13 @@ spec:
         data_volumes = job_config.get("data_volumes", [])
         output_volume = job_config.get("output_volume", {})
         ttl = job_config.get("ttl_seconds", 3600)
-        
+
         # Resources
         cpu_request = job_config.get("cpu_request", "500m")
         cpu_limit = job_config.get("cpu_limit", "2000m")
         memory_request = job_config.get("memory_request", "1Gi")
         memory_limit = job_config.get("memory_limit", "4Gi")
-        
+
         # Build environment variables section
         env_section = ""
         if env_vars:
@@ -809,28 +782,28 @@ spec:
                 env_list.append(f"""            - name: {key}
               value: '{value}'""")
             env_section = "\n".join(env_list)
-        
+
         # Build volume mounts section
         volume_mounts = []
         volumes = []
-        
+
         # Config volume
         if config_volume:
-            volume_mounts.append(f"""            - name: config
+            volume_mounts.append("""            - name: config
               mountPath: /workspace/configs
               readOnly: true""")
-            
+
             volumes.append(f"""        - name: config
           configMap:
             name: {config_volume['configMapName']}""")
-        
+
         # Data volumes (e.g., shared datasets)
         for i, vol in enumerate(data_volumes):
             vol_name = vol.get("name", f"data-{i}")
             volume_mounts.append(f"""            - name: {vol_name}
               mountPath: {vol['mountPath']}
               readOnly: {str(vol.get('readOnly', True)).lower()}""")
-            
+
             if vol.get("claimName"):
                 volumes.append(f"""        - name: {vol_name}
           persistentVolumeClaim:
@@ -838,19 +811,19 @@ spec:
             elif vol.get("type") == "emptyDir":
                 volumes.append(f"""        - name: {vol_name}
           emptyDir: {{}}""")
-        
+
         # Output volume
         if output_volume:
-            volume_mounts.append(f"""            - name: output
+            volume_mounts.append("""            - name: output
               mountPath: /workspace/outputs""")
-            
+
             volumes.append(f"""        - name: output
           persistentVolumeClaim:
             claimName: {output_volume['claimName']}""")
-        
+
         volume_mounts_str = "\n".join(volume_mounts) if volume_mounts else ""
         volumes_str = "\n".join(volumes) if volumes else ""
-        
+
         # Format command and args
         if isinstance(command, list) and len(command) == 2 and command[0] == "/bin/bash" and command[1] == "-c":
             # Special handling for bash scripts
@@ -859,7 +832,7 @@ spec:
         else:
             command_str = json.dumps(command) if command else '[]'
             args_str = json.dumps(args) if args else '[]'
-        
+
         return f"""apiVersion: batch/v1
 kind: Job
 metadata:

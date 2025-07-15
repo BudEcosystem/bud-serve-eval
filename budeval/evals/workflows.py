@@ -3,7 +3,6 @@ import json
 import uuid
 from datetime import timedelta
 from http import HTTPStatus
-from typing import Optional, Union
 
 import dapr.ext.workflow as wf
 from budmicroframe.commons.constants import WorkflowStatus
@@ -50,7 +49,7 @@ retry_policy = wf.RetryPolicy(
 # EvaluationWorkflow
 class EvaluationWorkflow:
     # Activities
-    @dapr_workflows.register_activity
+    @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
     def create_engine_config(
         ctx: wf.WorkflowActivityContext,
@@ -65,18 +64,19 @@ class EvaluationWorkflow:
         logger = logging.getLogger("::EVAL:: Create Engine Config")
         logger.debug(f"Creating engine config for {evaluate_model_request}")
 
-        workflow_id = ctx.workflow_id
-        task_id = ctx.task_id
-
         evaluate_model_request_json = StartEvaluationRequest.model_validate_json(evaluate_model_request)
 
-        response: Union[SuccessResponse, ErrorResponse]
+        response: SuccessResponse | ErrorResponse
         try:
             # Convert to generic evaluation request
             generic_request = GenericEvaluationRequest(
                 eval_request_id=evaluate_model_request_json.eval_request_id,
                 engine=evaluate_model_request_json.engine,
                 model=GenericModelConfig(
+                    api_version=None,
+                    model_path=None,
+                    tokenizer_path=None,
+                    top_p=0.0,
                     name=evaluate_model_request_json.model_name,
                     type=ModelType.API,
                     api_key=evaluate_model_request_json.api_key,
@@ -97,18 +97,20 @@ class EvaluationWorkflow:
                 timeout_minutes=30,
                 kubeconfig=evaluate_model_request_json.kubeconfig,
                 namespace="budeval",
+                debug=True,
             )
 
             # Get the appropriate transformer
             transformer = TransformerRegistry.get_transformer(generic_request.engine)
-            
+
             # Transform the request
             transformed = transformer.transform_request(generic_request)
-            
+
             # Create ConfigMap with transformed configuration
             from .configmap_manager import ConfigMapManager
+
             configmap_manager = ConfigMapManager(namespace="budeval")
-            
+
             configmap_result = configmap_manager.create_generic_config_map(
                 eval_request_id=str(generic_request.eval_request_id),
                 engine=generic_request.engine.value,
@@ -122,7 +124,7 @@ class EvaluationWorkflow:
                 param={
                     **configmap_result,
                     "transformed_data": transformed.model_dump(mode="json"),
-                }
+                },
             )
         except Exception as e:
             logger.error(f"Error creating engine config: {e}", exc_info=True)
@@ -131,7 +133,7 @@ class EvaluationWorkflow:
             )
         return response.model_dump(mode="json")
 
-    @dapr_workflows.register_activity
+    @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
     def deploy_eval_job(
         ctx: wf.WorkflowActivityContext,
@@ -151,13 +153,13 @@ class EvaluationWorkflow:
         task_id = ctx.task_id
 
         deploy_request_json = json.loads(deploy_request)
-        
+
         # Extract the original request and transformed data
         evaluate_model_request_json = StartEvaluationRequest.model_validate_json(
             deploy_request_json["evaluate_model_request"]
         )
         transformed_data = deploy_request_json["transformed_data"]
-        
+
         # Create deployment payload with engine from request
         payload = DeployEvalJobRequest(
             engine=evaluate_model_request_json.engine.value,
@@ -170,7 +172,7 @@ class EvaluationWorkflow:
 
         logger.debug(f"Deploying evaluation job for engine: {payload.engine}")
 
-        response: Union[SuccessResponse, ErrorResponse]
+        response: SuccessResponse | ErrorResponse
         try:
             # Pass transformed data to the service
             job_details = asyncio.run(
@@ -187,12 +189,12 @@ class EvaluationWorkflow:
             )
         return response.model_dump(mode="json")
 
-    @dapr_workflows.register_activity
+    @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
     def verify_cluster_connection(
         ctx: wf.WorkflowActivityContext,
         verify_cluster_connection_request: str,
-    ) -> dict:
+    ) -> SuccessResponse | ErrorResponse:
         """Verify the cluster connection.
 
         Args:
@@ -205,13 +207,12 @@ class EvaluationWorkflow:
         logger.debug(f"Verifying cluster connection for {verify_cluster_connection_request}")
 
         workflow_id = ctx.workflow_id
-        task_id = ctx.task_id
+        task_id = str(ctx.task_id)
 
         verify_cluster_connection_request_json = StartEvaluationRequest.model_validate_json(
             verify_cluster_connection_request
         )
 
-        response: Union[SuccessResponse, ErrorResponse]
         try:
             cluster_verified = asyncio.run(
                 EvaluationOpsService.verify_cluster_connection(
@@ -220,24 +221,23 @@ class EvaluationWorkflow:
             )
 
             if cluster_verified:
-                response = SuccessResponse(
-                    message="Cluster connection verified successfully", param={"cluster_verified": cluster_verified}
-                )
+                return SuccessResponse(
+                    code=HTTPStatus.OK.value,
+                    message="Cluster connection verified successfully",
+                    param={"cluster_verified": cluster_verified},
+                ).model_dump(mode="json")
             else:
-                response = ErrorResponse(
-                    message="Cluster connection verification failed", code=HTTPStatus.BAD_REQUEST.value
-                )
+                return ErrorResponse(
+                    code=HTTPStatus.BAD_REQUEST.value, message="Cluster connection verification failed"
+                ).model_dump(mode="json")
         except Exception as e:
             error_msg = (
                 f"Error verifying cluster connection for workflow_id: {workflow_id} and task_id: {task_id}, error: {e}"
             )
             logger.error(error_msg)
-            response = ErrorResponse(
-                message="Cluster connection verification failed", code=HTTPStatus.BAD_REQUEST.value
-            )
-        return response.model_dump(mode="json")
+            return ErrorResponse(message="Cluster connection verification failed", code=HTTPStatus.BAD_REQUEST.value).model_dump(mode="json")
 
-    @dapr_workflows.register_activity
+    @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
     def monitor_eval_job_progress(
         ctx: wf.WorkflowActivityContext,
@@ -254,15 +254,12 @@ class EvaluationWorkflow:
         logger = logging.getLogger("::EVAL:: Monitor Job Progress")
         logger.debug(f"Monitoring job progress for {monitor_request}")
 
-        workflow_id = ctx.workflow_id
-        task_id = ctx.task_id
-
         monitor_request_json = json.loads(monitor_request)
         job_id = monitor_request_json["job_id"]
         kubeconfig = monitor_request_json["kubeconfig"]
         namespace = monitor_request_json.get("namespace", "budeval")
 
-        response: Union[SuccessResponse, ErrorResponse]
+        response: SuccessResponse | ErrorResponse
         try:
             job_status = asyncio.run(EvaluationOpsService.get_job_status(job_id, kubeconfig, namespace))
 
@@ -276,7 +273,7 @@ class EvaluationWorkflow:
             )
         return response.model_dump(mode="json")
 
-    @dapr_workflows.register_workflow
+    @dapr_workflows.register_workflow  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
     def evaluate_model(ctx: wf.DaprWorkflowContext, evaluate_model_request: str):
         """Execute the workflow to evaluate a model.
@@ -693,8 +690,8 @@ class EvaluationWorkflow:
         return
 
     async def __call__(
-        self, request: StartEvaluationRequest, workflow_id: Optional[str] = None
-    ) -> Union[WorkflowMetadataResponse, ErrorResponse]:
+        self, request: StartEvaluationRequest, workflow_id: str | None = None
+    ) -> WorkflowMetadataResponse | ErrorResponse:
         """Evaluate a model with the given name."""
         logger = logging.getLogger("::EVAL:: EvaluateModelCall")
         workflow_id = str(workflow_id or uuid.uuid4())
@@ -707,9 +704,9 @@ class EvaluationWorkflow:
                 description="Verify if the cluster is reachable",
             ),
             WorkflowStep(
-                id="create_opencompass_config",
-                title="Creating OpenCompass Configuration",
-                description="Create ConfigMap with dynamic OpenCompass model configuration",
+                id="preparing_eval_engine",
+                title="Preparing Eval Engine",
+                description="Warming up eval enfine",
             ),
             WorkflowStep(
                 id="deploy_eval_job",
@@ -725,14 +722,21 @@ class EvaluationWorkflow:
 
         eta = 30 * 60  # 30 minutes estimate for evaluation jobs
         # Schedule the workflow
-        response = await dapr_workflows.schedule_workflow(
-            workflow_name="evaluate_model",
-            workflow_input=request.model_dump_json(),
-            workflow_id=workflow_id,
-            workflow_steps=workflow_steps,
-            eta=eta,
-            target_topic_name=request.source_topic,
-            target_name=request.source,
-        )
-
-        return response
+        try:
+            response = await dapr_workflows.schedule_workflow(
+                workflow_name="evaluate_model",
+                workflow_input=request.model_dump_json(),
+                workflow_id=workflow_id,
+                workflow_steps=workflow_steps,
+                eta=eta,
+                target_topic_name=request.source_topic,
+                target_name=request.source,
+            )
+            return response or ErrorResponse(
+                message="Failed to schedule workflow", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+            )
+        except Exception as e:
+            logger.error(f"Error scheduling workflow: {e}", exc_info=True)
+            return ErrorResponse(
+                message=f"Error scheduling workflow: {e}", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+            )

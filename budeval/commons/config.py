@@ -37,6 +37,13 @@ class AppConfig(BaseAppConfig):
     opencompass_dataset_url: str = (
         "https://github.com/open-compass/opencompass/releases/download/0.2.2.rc1/OpenCompassData-complete-20240207.zip"
     )
+    
+    # Eval Sync Configuration
+    eval_sync_enabled: bool = True
+    eval_sync_local_mode: bool = True
+    eval_manifest_url: str = "https://eval-datasets.bud.eco/v2/eval_manifest.json"
+    eval_sync_refresh_seconds: int = 3600  # 1 hour
+    eval_manifest_local_path: str = "budeval/data/eval_manifest.json"
 
 
 class SecretsConfig(BaseSecretsConfig):

@@ -20,7 +20,7 @@ from budmicroframe.commons import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from budeval.evals.services import EvaluationOpsService, EvaluationService
-
+from budeval.evals.schemas import  StartEvaluationRequest
 from .schemas import EvaluationRequest
 
 
@@ -40,26 +40,17 @@ async def start_eval(request: EvaluationRequest):
         dict: A simple hello world message
     """
     try:
-        # import asyncio
-        # from budeval.evals.volume_init import VolumeInitializer
-        # from budeval.evals.engine_preloader import EnginePreloader
-
-        # # Start volume initialization in background if not already initialized
-        # volume_init = VolumeInitializer()
-        # if not VolumeInitializer._initialized:
-        #     logger.info("Starting background volume initialization")
-        #     # Create a background task that won't block the request
-        #     asyncio.create_task(volume_init.ensure_eval_datasets_volume())
-
-        # # Start engine preloading in background if not already initialized
-        # engine_preloader = EnginePreloader()
-        # if not EnginePreloader.is_initialized():
-        #     logger.info("Starting background engine preloading")
-        #     # Create a background task that won't block the request
-        #     asyncio.create_task(engine_preloader.preload_all_engines())
-
         # Proceed with evaluation request immediately
-        response = await EvaluationService().evaluate_model(request)
+        payload = StartEvaluationRequest(
+            eval_request_id=request.eval_request_id,
+            engine=request.engine,
+            model_name=request.model_name,
+            api_key=request.api_key,
+            base_url=request.base_url,
+            datasets=request.datasets,
+            kubeconfig=request.kubeconfig,
+        )
+        response = await EvaluationService().evaluate_model(payload)
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save evaluation request: {str(e)}") from e
@@ -192,78 +183,8 @@ async def get_engine_status():
         raise HTTPException(status_code=500, detail=f"Failed to get engine status: {str(e)}") from e
 
 
-@evals_routes.post("/test-deploy")
-async def test_deploy_job(request: dict):
-    """Test endpoint to deploy a job with volumes using the provided payload format.
-
-    Args:
-        request (dict): The test request payload.
-
-    Returns:
-        dict: Job deployment result
-    """
-    try:
-        # Convert the test payload to DeployEvalJobRequest format
-        from budeval.evals.schemas import DeployEvalJobRequest
-
-        deploy_request = DeployEvalJobRequest(
-            engine="OpenCompass",  # Default engine
-            eval_request_id=request.get("eval_request_id", "test-job"),
-            kubeconfig=request.get("kubeconfig", "{}"),
-            api_key=request.get("api_key", ""),
-            base_url=request.get("base_url", ""),
-            dataset=["dataset1"],  # Default dataset
-        )
-
-        # Deploy the job
-        response = await EvaluationOpsService.deploy_eval_job(
-            deploy_request, task_id="test-task", workflow_id="test-workflow"
-        )
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to deploy test job: {str(e)}") from e
-
-
-@evals_routes.post("/test-configmap")
-async def test_create_configmap(request: dict):
-    """Test endpoint to create OpenCompass ConfigMap with provided payload.
-
-    Args:
-        request (dict): The test request payload with model configuration.
-
-    Returns:
-        dict: ConfigMap creation result
-    """
-    try:
-        from budeval.evals.configmap_manager import ConfigMapManager
-
-        # Extract parameters from request
-        eval_request_id = request.get("eval_request_id", "test-123")
-        model_name = request.get("model_name", "test-model")
-        api_key = request.get("api_key", "test-key")
-        base_url = request.get("base_url", "http://localhost:8000/v1")
-        datasets = request.get("datasets", ["mmlu", "gsm8k"])
-        kubeconfig = request.get("kubeconfig")
-
-        # Create ConfigMap
-        configmap_manager = ConfigMapManager(namespace="budeval")
-        result = configmap_manager.create_opencompass_config_map(
-            eval_request_id=eval_request_id,
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            datasets=datasets,
-            kubeconfig=kubeconfig,
-        )
-
-        return {"status": "success", "message": "ConfigMap created successfully", "data": result}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create ConfigMap: {str(e)}") from e
-
-
 @evals_routes.get("/configmap/{eval_request_id}")
-async def get_configmap_info(eval_request_id: str, kubeconfig: str = None):
+async def get_configmap_info(eval_request_id: str, kubeconfig: str | None = None):
     """Get information about a ConfigMap for an evaluation request.
 
     Args:
@@ -291,7 +212,7 @@ async def get_configmap_info(eval_request_id: str, kubeconfig: str = None):
 
 
 @evals_routes.delete("/configmap/{eval_request_id}")
-async def delete_configmap(eval_request_id: str, kubeconfig: str = None):
+async def delete_configmap(eval_request_id: str, kubeconfig: str | None = None):
     """Delete ConfigMap for an evaluation request.
 
     Args:
