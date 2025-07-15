@@ -235,7 +235,7 @@ class EvaluationWorkflow:
                 f"Error verifying cluster connection for workflow_id: {workflow_id} and task_id: {task_id}, error: {e}"
             )
             logger.error(error_msg)
-            return ErrorResponse(message="Cluster connection verification failed", code=HTTPStatus.BAD_REQUEST.value).model_dump(mode="json")
+            return ErrorResponse(message="Cluster connection verification failed", code=HTTPStatus.BAD_REQUEST.value).model_dump(mode="json") # type: ignore # noqa
 
     @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod

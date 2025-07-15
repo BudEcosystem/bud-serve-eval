@@ -178,6 +178,7 @@ eval = dict(
 
     def build_command(self, request: GenericEvaluationRequest) -> Tuple[List[str], List[str]]:
         """Build OpenCompass command and arguments."""
+        logger.info("OpenCompassTransformer.build_command called!")
         command = ["/bin/bash", "-c"]
 
         # Build the bash script that will:
@@ -187,14 +188,15 @@ eval = dict(
 
         script = f"""
 # Copy configuration files to OpenCompass config directory
-mkdir -p /opt/opencompass/configs/
-cp /workspace/configs/*.py /opt/opencompass/configs/
+mkdir -p /workspace/opencompass/configs/models/bud/
+cp /workspace/configs/bud-model.py /workspace/opencompass/configs/models/bud/
+cp /workspace/configs/*.py /workspace/opencompass/configs/
 
-# Change to OpenCompass directory
-cd /opt/opencompass
+# Change to workspace directory where OpenCompass is installed
+cd /workspace
 
 # Run OpenCompass evaluation
-python run.py \\
+python /workspace/run.py \\
     --models bud-model \\
     --datasets {datasets_str}_gen \\
     --work-dir /workspace/outputs \\

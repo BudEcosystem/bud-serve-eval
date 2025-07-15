@@ -23,8 +23,9 @@ from typing import Any
 from budmicroframe.commons import logging
 from fastapi import APIRouter, HTTPException, Query
 
-from .repository import get_eval_dataset_repository
 from .manifest_schemas import Dataset, TraitDefinition
+from .repository import get_eval_dataset_repository
+
 
 logger = logging.get_logger(__name__)
 
@@ -139,10 +140,10 @@ async def refresh_manifest() -> dict[str, Any]:
     """Force refresh of the evaluation dataset manifest."""
     try:
         from .manifest_cache import get_manifest_cache
-        
+
         cache = await get_manifest_cache()
         await cache.force_refresh()
-        
+
         manifest = await cache.get_manifest()
         return {
             "message": "Manifest refreshed successfully",
@@ -154,4 +155,4 @@ async def refresh_manifest() -> dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Failed to refresh manifest: {e}")
-        raise HTTPException(status_code=500, detail="Failed to refresh manifest") 
+        raise HTTPException(status_code=500, detail="Failed to refresh manifest")

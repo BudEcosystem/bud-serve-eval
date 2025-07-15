@@ -37,7 +37,7 @@ class AppConfig(BaseAppConfig):
     opencompass_dataset_url: str = (
         "https://github.com/open-compass/opencompass/releases/download/0.2.2.rc1/OpenCompassData-complete-20240207.zip"
     )
-    
+
     # Eval Sync Configuration
     eval_sync_enabled: bool = True
     eval_sync_local_mode: bool = True

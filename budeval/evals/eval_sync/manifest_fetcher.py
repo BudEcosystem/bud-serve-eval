@@ -29,17 +29,18 @@ from budeval.commons.config import app_settings
 
 from .manifest_schemas import EvalDataManifest
 
+
 logger = logging.get_logger(__name__)
 
 
 class ManifestFetcher:
     """Fetches evaluation data manifest from local file or remote URL."""
-    
+
     def __init__(self) -> None:
         self.local_mode = app_settings.eval_sync_local_mode
         self.manifest_url = app_settings.eval_manifest_url
         self.local_path = Path(app_settings.eval_manifest_local_path)
-    
+
     async def fetch_manifest(self) -> EvalDataManifest:
         """Fetch manifest from configured source.
         
@@ -56,17 +57,17 @@ class ManifestFetcher:
             return await self._fetch_local_manifest()
         else:
             return await self._fetch_remote_manifest()
-    
+
     async def _fetch_local_manifest(self) -> EvalDataManifest:
         """Fetch manifest from local file."""
         logger.info(f"Fetching manifest from local file: {self.local_path}")
-        
+
         if not self.local_path.exists():
             raise FileNotFoundError(f"Local manifest file not found: {self.local_path}")
-        
+
         async with aiofiles.open(self.local_path, "r", encoding="utf-8") as f:
             content = await f.read()
-        
+
         try:
             manifest_data = json.loads(content)
             return EvalDataManifest.model_validate(manifest_data)
@@ -76,17 +77,17 @@ class ManifestFetcher:
         except Exception as e:
             logger.error(f"Failed to parse manifest: {e}")
             raise ValueError(f"Invalid manifest format: {e}")
-    
+
     async def _fetch_remote_manifest(self) -> EvalDataManifest:
         """Fetch manifest from remote URL."""
         logger.info(f"Fetching manifest from remote URL: {self.manifest_url}")
-        
+
         timeout = aiohttp.ClientTimeout(total=300)  # 5 minutes timeout for large files
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(self.manifest_url) as response:
                 response.raise_for_status()
                 content = await response.text()
-        
+
         try:
             manifest_data = json.loads(content)
             return EvalDataManifest.model_validate(manifest_data)
@@ -95,4 +96,4 @@ class ManifestFetcher:
             raise
         except Exception as e:
             logger.error(f"Failed to parse remote manifest: {e}")
-            raise ValueError(f"Invalid manifest format: {e}") 
+            raise ValueError(f"Invalid manifest format: {e}")

@@ -23,7 +23,9 @@ class EvaluationOpsService:
         """Verify cluster connection."""
         logger.info(f"Verifying cluster connection for workflow_id: {workflow_id} and task_id: {task_id}")
         k8_handler = KubernetesClusterHandler()
-        return k8_handler.verify_cluster_connection(verify_cluster_connection_request.kubeconfig)
+        # Use empty string if kubeconfig is None (will use default kubeconfig)
+        kubeconfig = verify_cluster_connection_request.kubeconfig or ""
+        return k8_handler.verify_cluster_connection(kubeconfig)
 
     @classmethod
     async def deploy_eval_job(
@@ -113,6 +115,12 @@ class EvaluationOpsService:
             # Extract job configuration from transformed data
             job_config = transformed_data.get("job_config", {})
             job_uuid = job_config.get("job_id", f"eval-{evaluate_model_request.eval_request_id}")
+
+            # Debug logging
+            logger.info(f"Transformed data keys: {list(transformed_data.keys())}")
+            logger.info(f"Job config keys: {list(job_config.keys())}")
+            logger.info(f"Job config command: {job_config.get('command')}")
+            logger.info(f"Job config args: {job_config.get('args')[:200] if job_config.get('args') else 'None'}")
 
             logger.info(f"Creating job with UUID: {job_uuid}")
             logger.info(f"Using engine: {job_config.get('engine')}, Docker image: {job_config.get('image')}")
@@ -204,7 +212,7 @@ class EvaluationService:
 
         response: Union[WorkflowMetadataResponse, ErrorResponse]
 
-        from .workflows import EvaluationWorkflow # Avoid Circular Import
+        from .workflows import EvaluationWorkflow  # Avoid Circular Import
 
         try:
             response = await EvaluationWorkflow().__call__(evaluate_model_request)

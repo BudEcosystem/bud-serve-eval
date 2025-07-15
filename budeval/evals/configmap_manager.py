@@ -123,28 +123,28 @@ class ConfigMapManager:
             # Create simple, self-contained evaluation config with proper dataset imports
             dataset_imports = []
             dataset_list = []
-            
+
             # Map dataset names to their OpenCompass imports - use simpler approach
             dataset_mapping = {
                 "mmlu": ("from opencompass.datasets.mmlu import mmlu_datasets", "mmlu_datasets"),
-                "gsm8k": ("from opencompass.datasets.gsm8k import gsm8k_datasets", "gsm8k_datasets"), 
+                "gsm8k": ("from opencompass.datasets.gsm8k import gsm8k_datasets", "gsm8k_datasets"),
                 "hellaswag": ("from opencompass.datasets.hellaswag import hellaswag_datasets", "hellaswag_datasets"),
                 "arc": ("from opencompass.datasets.ARC_c import ARC_c_datasets", "ARC_c_datasets"),
                 "winogrande": ("from opencompass.datasets.winogrande import winogrande_datasets", "winogrande_datasets"),
             }
-            
+
             for dataset in datasets:
                 dataset_name = dataset.lower()
                 if dataset_name in dataset_mapping:
                     import_stmt, var_name = dataset_mapping[dataset_name]
                     dataset_imports.append(import_stmt)
                     dataset_list.append(var_name)
-            
+
             # Default to MMLU if no valid datasets found
             if not dataset_imports:
                 dataset_imports = ["from opencompass.datasets import mmlu_datasets"]
                 dataset_list = ["mmlu_datasets"]
-            
+
             imports_str = "\n".join(dataset_imports)
             # For simplicity, just use the first dataset to avoid LazyObject concatenation issues
             datasets_str = dataset_list[0]

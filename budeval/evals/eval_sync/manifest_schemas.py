@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 class Repository(BaseModel):
     """Repository information."""
-    
+
     name: str = Field(..., description="Repository name")
     description: str = Field(..., description="Repository description")
     maintainer: str = Field(..., description="Repository maintainer")
@@ -38,7 +38,7 @@ class Repository(BaseModel):
 
 class PreviousVersion(BaseModel):
     """Previous version information."""
-    
+
     version: str = Field(..., description="Version string")
     deprecated: bool = Field(False, description="Whether version is deprecated")
     migration_required: bool = Field(False, description="Whether migration is required")
@@ -46,14 +46,14 @@ class PreviousVersion(BaseModel):
 
 class VersionInfo(BaseModel):
     """Version information for the manifest."""
-    
+
     current_version: str = Field(..., description="Current version of the manifest")
     previous_versions: list[PreviousVersion] = Field(default_factory=list, description="Previous versions")
 
 
 class TraitDefinition(BaseModel):
     """Definition of an evaluation trait."""
-    
+
     name: str = Field(..., description="Name of the trait")
     description: str = Field(..., description="Description of the trait")
     icon: str = Field(..., description="Icon path for the trait")
@@ -61,7 +61,7 @@ class TraitDefinition(BaseModel):
 
 class TraitsInfo(BaseModel):
     """Information about evaluation traits."""
-    
+
     version: str = Field(..., description="Version of traits definitions")
     checksum: str = Field(..., description="Checksum of traits data")
     url: str = Field(..., description="URL to traits definition file")
@@ -71,7 +71,7 @@ class TraitsInfo(BaseModel):
 
 class DatasetMetadata(BaseModel):
     """Dataset metadata information."""
-    
+
     format: str = Field(..., description="Dataset format (e.g., 'jsonl')")
     language: str = Field(..., description="Primary language")
     domain: str = Field(..., description="Domain or category")
@@ -83,7 +83,7 @@ class DatasetMetadata(BaseModel):
 
 class CreatorInfo(BaseModel):
     """Creator information."""
-    
+
     uid: str = Field(..., description="User ID")
     name: str | None = Field(None, description="Creator name")
     avatar: str | None = Field(None, description="Avatar URL")
@@ -92,28 +92,28 @@ class CreatorInfo(BaseModel):
 
 class Dimension(BaseModel):
     """Dimension information."""
-    
+
     cn: str = Field(..., description="Chinese name")
     en: str = Field(..., description="English name")
 
 
 class Tag(BaseModel):
     """Tag information."""
-    
+
     cn: str = Field(..., description="Chinese tag")
     en: str = Field(..., description="English tag")
 
 
 class Description(BaseModel):
     """Bilingual description."""
-    
+
     cn: str = Field(..., description="Chinese description")
     en: str = Field(..., description="English description")
 
 
 class QuestionExample(BaseModel):
     """Example question and answer."""
-    
+
     question: str = Field(..., description="Question text")
     options: list[str] = Field(..., description="Answer options")
     correct_answer: str = Field(..., description="Correct answer")
@@ -122,7 +122,7 @@ class QuestionExample(BaseModel):
 
 class SampleQuestionsAnswers(BaseModel):
     """Sample questions and answers structure."""
-    
+
     examples: list[QuestionExample] = Field(default_factory=list, description="Example questions")
     total_questions: int = Field(0, description="Total number of questions")
     question_format: str = Field("", description="Format of questions")
@@ -131,14 +131,14 @@ class SampleQuestionsAnswers(BaseModel):
 
 class AdvantagesDisadvantages(BaseModel):
     """Advantages and disadvantages."""
-    
+
     advantages: list[str] = Field(default_factory=list, description="Advantages")
     disadvantages: list[str] = Field(default_factory=list, description="Disadvantages")
 
 
 class OriginalData(BaseModel):
     """Original dataset metadata from source."""
-    
+
     id: str = Field(..., description="Original dataset ID")
     language: list[str] = Field(default_factory=list, description="Supported languages")
     domains: list[str] = Field(default_factory=list, description="Domains")
@@ -173,7 +173,7 @@ class OriginalData(BaseModel):
 
 class Dataset(BaseModel):
     """Dataset metadata."""
-    
+
     id: str = Field(..., description="Unique dataset identifier")
     name: str = Field(..., description="Human-readable dataset name")
     version: str = Field(..., description="Dataset version")
@@ -189,7 +189,7 @@ class Dataset(BaseModel):
 
 class DatasetCollection(BaseModel):
     """Collection of datasets from a specific source."""
-    
+
     version: str = Field(..., description="Collection version")
     license: str = Field(..., description="License information")
     source: str = Field(..., description="Source name")
@@ -200,7 +200,7 @@ class DatasetCollection(BaseModel):
 
 class Authentication(BaseModel):
     """Authentication configuration."""
-    
+
     required_for: list[str] = Field(default_factory=list, description="Sources requiring authentication")
     method: str = Field("", description="Authentication method")
     token_endpoint: str = Field("", description="Token endpoint URL")
@@ -208,7 +208,7 @@ class Authentication(BaseModel):
 
 class EvalDataManifest(BaseModel):
     """Root manifest structure for evaluation data."""
-    
+
     manifest_version: str = Field(..., description="Manifest version")
     last_updated: datetime = Field(..., description="Last update timestamp")
     schema_version: str = Field(..., description="Schema version")
@@ -218,4 +218,4 @@ class EvalDataManifest(BaseModel):
     datasets: dict[str, DatasetCollection] = Field(..., description="Datasets grouped by source")
     authentication: Authentication = Field(..., description="Authentication configuration")
     migration: Any | None = Field(None, description="Migration information")
-    changelog: dict[str, list[str]] = Field(default_factory=dict, description="Changelog") 
+    changelog: dict[str, list[str]] = Field(default_factory=dict, description="Changelog")
