@@ -1,6 +1,7 @@
 """OpenCompass-specific transformer implementation."""
 
 import json
+import os
 from typing import Any, Dict, List, Tuple
 
 from budeval.commons.logging import logging
@@ -17,34 +18,51 @@ logger = logging.getLogger(__name__)
 
 
 class OpenCompassTransformer(BaseTransformer):
-    """Transformer for OpenCompass evaluation engine."""
+    """Transformer for OpenCompass evaluation engine.
 
-    # Dataset mapping from generic names to OpenCompass names
-    DATASET_MAPPING = {
-        # Knowledge datasets
-        "mmlu": "mmlu",
-        "cmmlu": "cmmlu",
-        "c_eval": "ceval",
-
-        # Math datasets
-        "gsm8k": "gsm8k",
-        "math": "math",
-
-        # Reasoning datasets
-        "bbh": "bbh",
-        "arc": "arc",
-        "hellaswag": "hellaswag",
-
-        # Language datasets
-        "humaneval": "humaneval",
-        "mbpp": "mbpp",
-
-        # Add more mappings as needed
-    }
+    This transformer uses a hybrid approach:
+    - CLI arguments for most configuration options
+    - Environment variables for API credentials and base URLs
+    - Minimal config file generation only when necessary
+    - Dataset mappings loaded from eval_manifest.json
+    """
 
     def __init__(self, engine: EvaluationEngine = EvaluationEngine.OPENCOMPASS):
-        """Initialize OpenCompass transformer."""
+        """Initialize OpenCompass transformer.
+
+        Loads dataset mappings from eval_manifest.json on initialization.
+        """
         super().__init__(engine)
+        self._eval_manifest = None
+        self._dataset_mappings = {}
+        self._load_eval_manifest()
+
+    def _load_eval_manifest(self) -> None:
+        """Load evaluation manifest with dataset mappings."""
+        manifest_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "data",
+            "eval_manifest.json"
+        )
+
+        with open(manifest_path, "r") as f:
+            self._eval_manifest = json.load(f)
+
+        # Build dataset mappings from manifest
+        if "datasets" in self._eval_manifest:
+            for _provider, provider_data in self._eval_manifest["datasets"].items():
+                if "datasets" in provider_data:
+                    for dataset in provider_data["datasets"]:
+                        dataset_name = dataset.get("name", "").lower()
+                        if "evaluation_methods" in dataset:
+                            self._dataset_mappings[dataset_name] = {
+                                "gen": dataset["evaluation_methods"].get("gen"),
+                                "ppl": dataset["evaluation_methods"].get("ppl"),
+                                "id": dataset.get("id"),
+                                "description": dataset.get("description")
+                            }
+
+        logger.info(f"Loaded {len(self._dataset_mappings)} dataset mappings from manifest")
 
     def transform_request(self, request: GenericEvaluationRequest) -> TransformedEvaluationData:
         """Transform generic request to OpenCompass-specific format."""
@@ -69,137 +87,89 @@ class OpenCompassTransformer(BaseTransformer):
         )
 
     def generate_config_files(self, request: GenericEvaluationRequest) -> Dict[str, str]:
-        """Generate OpenCompass configuration files."""
+        """Generate minimal configuration files for OpenCompass."""
         config_files = {}
 
-        # Generate model configuration
-        config_files["bud-model.py"] = self._generate_model_config(request)
-
-        # Generate dataset configuration
-        config_files["bud-datasets.py"] = self._generate_dataset_config(request)
-
-        # Generate main evaluation configuration
-        config_files["eval_config.py"] = self._generate_eval_config(request)
-
-        # Generate metadata
+        # Since we're using CLI + environment variables, we only need metadata
+        # The actual model config is generated inline in build_command()
         config_files["metadata.json"] = json.dumps({
             "eval_request_id": str(request.eval_request_id),
             "model_name": request.model.name,
             "datasets": [d.name for d in request.datasets],
             "engine": self.engine.value,
+            "eval_mode": request.extra_params.get("eval_mode", "gen"),
         }, indent=2)
 
         return config_files
 
-    def _generate_model_config(self, request: GenericEvaluationRequest) -> str:
-        """Generate OpenCompass model configuration."""
-        model = request.model
-
-        # Extract parameters
-        max_out_len = model.extra_params.get("max_out_len", model.max_tokens or 2048)
-        max_seq_len = model.extra_params.get("max_seq_len", 4096)
-        batch_size = request.batch_size
-        query_per_second = model.extra_params.get("query_per_second", 1)
-
-        if model.type == ModelType.API:
-            config = f"""from opencompass.models import OpenAI
-
-models = [
-    dict(
-        abbr='{request.eval_request_id}',
-        type=OpenAI,
-        path='{model.name}',
-        key='{model.api_key}',
-        query_per_second={query_per_second},
-        max_out_len={max_out_len},
-        max_seq_len={max_seq_len},
-        openai_api_base='{model.base_url}',
-        batch_size={batch_size}),
-]
-"""
-        else:
-            # For local models, we'd use different OpenCompass model types
-            raise NotImplementedError(f"Model type {model.type} not yet implemented for OpenCompass")
-
-        logger.info(f"Generated OpenCompass model config for: {model.name}")
-        return config
-
-    def _generate_dataset_config(self, request: GenericEvaluationRequest) -> str:
-        """Generate OpenCompass dataset configuration."""
-        dataset_list = []
-
-        for dataset in request.datasets:
-            # Map generic dataset name to OpenCompass name
-            oc_dataset_name = self.get_dataset_mapping(dataset.name)
-
-            # Add _gen suffix for generation-based evaluation if not present
-            if not oc_dataset_name.endswith('_gen'):
-                oc_dataset_name = f"{oc_dataset_name}_gen"
-
-            dataset_list.append(f"'{oc_dataset_name}'")
-
-        config = f"""# Dataset configuration
-from opencompass.datasets import *
-
-# Use predefined dataset configurations
-datasets = [{', '.join(dataset_list)}]
-"""
-
-        logger.info(f"Generated OpenCompass dataset config with datasets: {dataset_list}")
-        return config
-
-    def _generate_eval_config(self, request: GenericEvaluationRequest) -> str:
-        """Generate main OpenCompass evaluation configuration."""
-        config = f"""# Main evaluation configuration
-from mmengine.config import read_base
-
-# Read the model and dataset configurations
-with read_base():
-    from .bud_model import models
-    from .bud_datasets import datasets
-
-# Evaluation configuration
-eval = dict(
-    partitioner=dict(
-        type='NaivePartitioner',
-        num_gpus=1
-    ),
-    runner=dict(
-        type='LocalRunner',
-        task=dict(type='OpenICLInferTask'),
-        max_num_workers={request.num_workers}
-    ),
-)
-
-# Work directory will be set via command line
-"""
-
-        return config
 
     def build_command(self, request: GenericEvaluationRequest) -> Tuple[List[str], List[str]]:
-        """Build OpenCompass command and arguments."""
+        """Build OpenCompass command and arguments.
+
+        Creates a bash script that:
+        1. Generates a model config file that reads from environment variables
+        2. Runs OpenCompass with the model config and datasets specified via CLI
+        3. Uses environment variables for API credentials (set by get_environment_variables)
+
+        Args:
+            request: The evaluation request
+
+        Returns:
+            Tuple of (command, args) where command is ["/bin/bash", "-c"] and
+            args contains the script to execute
+        """
         logger.info("OpenCompassTransformer.build_command called!")
         command = ["/bin/bash", "-c"]
 
-        # Build the bash script that will:
-        # 1. Copy configs to the right location
-        # 2. Run OpenCompass with the correct arguments
-        datasets_str = " ".join([self.get_dataset_mapping(d.name) for d in request.datasets])
+        # Get dataset names with appropriate evaluation mode suffix from manifest
+        dataset_names = []
+        for dataset in request.datasets:
+            dataset_mapping = self.get_dataset_mapping(dataset.name)
+            if dataset_mapping:
+                # Default to 'gen' mode, can be made configurable later
+                eval_mode = request.extra_params.get("eval_mode", "gen")
+                dataset_name = dataset_mapping.get(eval_mode)
+                if dataset_name:
+                    dataset_names.append(dataset_name)
+                else:
+                    logger.warning(f"No {eval_mode} mapping for dataset {dataset.name}")
+            else:
+                logger.warning(f"No mapping found for dataset {dataset.name}")
 
+        datasets_str = " ".join(dataset_names)
+
+        # Create a model-only config file
         script = f"""
-# Copy configuration files to OpenCompass config directory
-mkdir -p /workspace/opencompass/configs/models/bud/
-cp /workspace/configs/bud-model.py /workspace/opencompass/configs/models/bud/
-cp /workspace/configs/*.py /workspace/opencompass/configs/
+# Create a model config file that uses environment variables
+mkdir -p /workspace/outputs/configs
+cat > /workspace/outputs/configs/bud_model.py << 'EOF'
+from opencompass.models import OpenAISDK
+import os
+
+models = [
+    dict(
+        type=OpenAISDK,
+        abbr='{request.eval_request_id}',
+        path='{request.model.name}',  # Custom model name
+        key=os.environ.get('OPENAI_API_KEY'),
+        openai_api_base=os.environ.get('OPENAI_API_BASE'),
+        query_per_second={int(request.model.extra_params.get("query_per_second", "1"))},
+        max_out_len={int(request.model.extra_params.get("max_out_len", str(request.model.max_tokens or 2048)))},
+        max_seq_len={int(request.model.extra_params.get("max_seq_len", "4096"))},
+        batch_size={request.batch_size}
+    ),
+]
+EOF
 
 # Change to workspace directory where OpenCompass is installed
 cd /workspace
 
-# Run OpenCompass evaluation
+# Run OpenCompass evaluation with model config and datasets via CLI
 python /workspace/run.py \\
-    --models bud-model \\
-    --datasets {datasets_str}_gen \\
+    --models /workspace/outputs/configs/bud_model.py \\
+    --datasets {datasets_str} \\
     --work-dir /workspace/outputs \\
+    --max-num-workers {request.num_workers} \\
     {"--debug" if request.debug else ""}
 """
 
@@ -228,13 +198,32 @@ python /workspace/run.py \\
         ]
 
     def get_environment_variables(self, request: GenericEvaluationRequest) -> Dict[str, str]:
-        """Get environment variables for OpenCompass."""
+        """Get environment variables for OpenCompass.
+
+        Sets up:
+        - Cache directories for HuggingFace, Transformers, and PyTorch
+        - API credentials (OPENAI_API_KEY and OPENAI_API_BASE)
+        - Any additional environment variables from request.extra_params
+
+        Args:
+            request: The evaluation request
+
+        Returns:
+            Dictionary of environment variable name to value mappings
+        """
         env_vars = {
             "HF_HOME": "/workspace/cache/huggingface",
             "TRANSFORMERS_CACHE": "/workspace/cache/transformers",
             "TORCH_HOME": "/workspace/cache/torch",
             "ENGINE_ARGS": json.dumps(request.model.extra_params),
         }
+
+        # Add API configuration as environment variables
+        if request.model.type == ModelType.API:
+            if request.model.api_key:
+                env_vars["OPENAI_API_KEY"] = request.model.api_key
+            if request.model.base_url:
+                env_vars["OPENAI_API_BASE"] = request.model.base_url
 
         # Add any additional environment variables from the request
         if "env_vars" in request.extra_params:
@@ -258,7 +247,7 @@ python /workspace/run.py \\
         # Check if datasets are supported
         unsupported = []
         for dataset in request.datasets:
-            if dataset.name.lower() not in self.DATASET_MAPPING:
+            if dataset.name.lower() not in self._dataset_mappings:
                 unsupported.append(dataset.name)
 
         if unsupported:
@@ -266,8 +255,8 @@ python /workspace/run.py \\
 
     def get_supported_datasets(self) -> List[str]:
         """Get list of datasets supported by OpenCompass."""
-        return list(self.DATASET_MAPPING.keys())
+        return list(self._dataset_mappings.keys())
 
-    def get_dataset_mapping(self, dataset_name: str) -> str:
-        """Map generic dataset name to OpenCompass-specific name."""
-        return self.DATASET_MAPPING.get(dataset_name.lower(), dataset_name.lower())
+    def get_dataset_mapping(self, dataset_name: str) -> Dict[str, str]:
+        """Map generic dataset name to OpenCompass-specific names for different eval modes."""
+        return self._dataset_mappings.get(dataset_name.lower(), {})

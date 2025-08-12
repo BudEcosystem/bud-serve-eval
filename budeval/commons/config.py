@@ -43,7 +43,7 @@ class AppConfig(BaseAppConfig):
     eval_sync_local_mode: bool = True
     eval_manifest_url: str = "https://eval-datasets.bud.eco/v2/eval_manifest.json"
     eval_sync_refresh_seconds: int = 3600  # 1 hour
-    eval_manifest_local_path: str = "budeval/data/eval_manifest.json"
+    eval_manifest_local_path: str = "budeval/data/eval_manifest_test.json"
 
 
 class SecretsConfig(BaseSecretsConfig):

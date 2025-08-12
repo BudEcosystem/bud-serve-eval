@@ -252,6 +252,19 @@ class AnsibleOrchestrator:
 
         job_yaml = self._render_generic_job_yaml(uuid, job_config, namespace)
 
+        # Enhanced debug logging
+        logger.info("=== OpenCompass Job Submission Debug ===")
+        logger.info(f"Job UUID: {uuid}")
+        logger.info(f"Job config command: {job_config.get('command')}")
+        logger.info(f"Job config args: {job_config.get('args')}")
+        logger.info(f"Environment variables: {job_config.get('env_vars', {})}")
+        logger.info(f"Data volumes: {job_config.get('data_volumes', [])}")
+        logger.info(f"Output volume: {job_config.get('output_volume', {})}")
+        logger.info(f"Config volume: {job_config.get('config_volume', {})}")
+        logger.info("=== Full Job YAML ===")
+        logger.info(job_yaml)
+        logger.info("=== End Debug ===")
+
         files = {
             "pvc-output.yaml": pvc_output_yaml,
             "job.yaml": job_yaml,
@@ -668,7 +681,7 @@ spec:
 
         # Create OpenCompass CLI arguments - use config file mode with bud-model
         opencompass_cmd = (
-            f"python run.py --models bud-model --datasets {datasets_arg} --work-dir /workspace/outputs --debug"
+            f"cd /workspace && python /opt/opencompass/run.py --models bud-model --datasets {datasets_arg} --work-dir /workspace/outputs --debug"
         )
 
         # Create bash script that copies config and runs OpenCompass

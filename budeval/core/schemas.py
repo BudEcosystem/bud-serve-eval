@@ -49,9 +49,9 @@ class GenericModelConfig(BaseModel):
     tokenizer_path: str | None = Field(None, description="Path to tokenizer")
 
     # Model parameters
-    temperature: float = Field(0.7, description="Temperature for generation")
+    temperature: float | None = Field(0.7, description="Temperature for generation")
     max_tokens: int | None = Field(None, description="Maximum tokens to generate")
-    top_p: float = Field(1.0, description="Top-p sampling parameter")
+    top_p: float | None = Field(1.0, description="Top-p sampling parameter")
 
     # Additional engine-specific parameters
     extra_params: dict[str, str] = Field(default_factory=dict, description="Engine-specific parameters")

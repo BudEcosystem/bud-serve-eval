@@ -68,6 +68,7 @@ class EvaluationWorkflow:
 
         response: SuccessResponse | ErrorResponse
         try:
+            # TODO: check the none cases, see if the opencompass handles it
             # Convert to generic evaluation request
             generic_request = GenericEvaluationRequest(
                 eval_request_id=evaluate_model_request_json.eval_request_id,
@@ -76,21 +77,22 @@ class EvaluationWorkflow:
                     api_version=None,
                     model_path=None,
                     tokenizer_path=None,
-                    top_p=0.0,
+                    top_p=None,
                     name=evaluate_model_request_json.model_name,
                     type=ModelType.API,
                     api_key=evaluate_model_request_json.api_key,
                     base_url=evaluate_model_request_json.base_url,
-                    temperature=0.0,
-                    max_tokens=2048,
+                    temperature=None,
+                    max_tokens=None,
                 ),
                 datasets=[
                     GenericDatasetConfig(
-                        name=dataset,
-                        category=DatasetCategory.CUSTOM,
+                        name=dataset_name,
+                        category=DatasetCategory.CUSTOM,  # Default category
+                        version="1.0.0",
                         split="test",
                     )
-                    for dataset in (evaluate_model_request_json.datasets or ["mmlu", "gsm8k"])
+                    for dataset_name in (evaluate_model_request_json.datasets or [])
                 ],
                 batch_size=8,
                 num_workers=1,
@@ -120,6 +122,7 @@ class EvaluationWorkflow:
 
             logger.info(f"Created {generic_request.engine.value} ConfigMap: {configmap_result['configmap_name']}")
             response = SuccessResponse(
+                code=HTTPStatus.CREATED.value,
                 message=f"{generic_request.engine.value} configuration created successfully",
                 param={
                     **configmap_result,
@@ -307,7 +310,7 @@ class EvaluationWorkflow:
                 "eval_request_id": str(evaluate_model_request_json.eval_request_id),
                 "api_key": evaluate_model_request_json.api_key,
                 "base_url": evaluate_model_request_json.base_url,
-                "kubeconfig": evaluate_model_request_json.kubeconfig,
+                "kubeconfig": evaluate_model_request_json.kubeconfig, # Preference for using in cluster execution
             },
         )
 

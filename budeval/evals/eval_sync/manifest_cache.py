@@ -19,14 +19,17 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
+from datetime import datetime, timezone
 
 from budmicroframe.commons import logging
+from budmicroframe.shared.psql_service import Database
+from sqlalchemy import select
 
 from budeval.commons.config import app_settings
 
 from .manifest_fetcher import ManifestFetcher
 from .manifest_schemas import EvalDataManifest
+from .models import EvalSyncState
 
 
 logger = logging.get_logger(__name__)
@@ -41,7 +44,8 @@ class ManifestCache:
         self.last_synced_version: str | None = None
         self.refresh_task: asyncio.Task | None = None
         self.refresh_interval = app_settings.eval_sync_refresh_seconds
-        self.version_file = Path(app_settings.base_dir) / ".eval_manifest_version"
+        self.db = Database()
+        self.db.connect()
 
     async def initialize(self) -> None:
         """Initialize the cache by loading the manifest."""
@@ -115,22 +119,47 @@ class ManifestCache:
                 logger.error(f"Error in background manifest refresh: {e}")
 
     async def _load_last_synced_version(self) -> None:
-        """Load the last synced version from file."""
+        """Load the last synced version from database."""
         try:
-            if self.version_file.exists():
-                self.last_synced_version = self.version_file.read_text().strip()
-                logger.debug(f"Loaded last synced version: {self.last_synced_version}")
+            with self.db.get_session() as session:
+                # Query for the most recent successful sync
+                stmt = (
+                    select(EvalSyncState)
+                    .where(EvalSyncState.sync_status == "completed")
+                    .order_by(EvalSyncState.sync_timestamp.desc())
+                    .limit(1)
+                )
+                
+                result = session.execute(stmt)
+                sync_state = result.scalar_one_or_none()
+                
+                if sync_state:
+                    self.last_synced_version = sync_state.manifest_version
+                    logger.debug(f"Loaded last synced version from database: {self.last_synced_version}")
+                else:
+                    logger.debug("No previous sync found in database")
         except Exception as e:
-            logger.warning(f"Failed to load last synced version: {e}")
+            logger.warning(f"Failed to load last synced version from database: {e}")
 
     async def _save_last_synced_version(self) -> None:
-        """Save the last synced version to file."""
+        """Save the last synced version to database."""
         try:
             if self.last_synced_version:
-                self.version_file.write_text(self.last_synced_version)
-                logger.debug(f"Saved last synced version: {self.last_synced_version}")
+                with self.db.get_session() as session:
+                    sync_state = EvalSyncState(
+                        manifest_version=self.last_synced_version,
+                        sync_timestamp=datetime.now(timezone.utc),
+                        sync_status="completed",
+                        sync_metadata={
+                            "datasets_count": sum(len(collection.datasets) for collection in self.manifest.datasets.values()) if self.manifest else 0,
+                            "traits_count": self.manifest.traits.count if self.manifest and self.manifest.traits else 0,
+                        }
+                    )
+                    session.add(sync_state)
+                    session.commit()
+                    logger.debug(f"Saved last synced version to database: {self.last_synced_version}")
         except Exception as e:
-            logger.warning(f"Failed to save last synced version: {e}")
+            logger.warning(f"Failed to save last synced version to database: {e}")
 
 
 # Global cache instance

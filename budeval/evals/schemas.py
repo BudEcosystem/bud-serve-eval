@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from budmicroframe.commons.schemas import CloudEventBase
@@ -7,32 +7,89 @@ from pydantic import BaseModel, Field
 from budeval.core.schemas import EvaluationEngine
 
 
-class EvaluationRequest(CloudEventBase):
-    """Schema for evaluation request."""
-
-    eval_request_id: UUID = Field(..., description="Unique identifier for the evaluation request")
-    engine: EvaluationEngine = Field(
-        EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
-    )
+# Sub-schemas for nested structure
+class EvalModelInfo(BaseModel):
+    """Model information for evaluation."""
     model_name: str = Field(..., description="Name of the model to be evaluated")
+    endpoint: str = Field(..., description="Endpoint of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
-    base_url: str = Field(..., description="Base URL for the model API")
-    datasets: Optional[List[str]] = Field(
-        None, description="List of datasets to evaluate on (defaults to engine-specific defaults)"
+    extra_args: Dict[str, Any] = Field(default_factory=dict, description="Extra arguments for the model")
+
+
+class EvalDataset(BaseModel):
+    """Dataset information for evaluation."""
+    dataset_id: str = Field(..., description="ID of the dataset to be evaluated")
+
+
+class EvalConfig(BaseModel):
+    """Configuration for evaluation."""
+    config_name: str = Field(..., description="Name of the evaluation configuration")
+    config_value: Dict[str, Any] = Field(..., description="Value of the evaluation configuration")
+
+
+class EvaluationRequest(CloudEventBase):
+    """Schema for evaluation request with nested structure."""
+
+    # Using uuid as primary identifier to match bud-eval
+    uuid: UUID = Field(..., description="Unique identifier for the evaluation request")
+    
+    # Keep eval_request_id for backward compatibility (alias for uuid)
+    @property
+    def eval_request_id(self) -> UUID:
+        return self.uuid
+    
+    # Nested model info structure
+    eval_model_info: EvalModelInfo = Field(..., description="Model information for evaluation")
+    
+    # Structured datasets instead of simple strings
+    eval_datasets: List[EvalDataset] = Field(..., description="Evaluation datasets")
+    
+    # New field for evaluation configurations
+    eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
+    
+    # Keep engine field for compatibility
+    engine: EvaluationEngine = Field(
+        default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
     )
+    
+    # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
+    
+    # Backward compatibility properties
+    @property
+    def model_name(self) -> str:
+        return self.eval_model_info.model_name
+    
+    @property
+    def api_key(self) -> str:
+        return self.eval_model_info.api_key
+    
+    @property
+    def base_url(self) -> str:
+        return self.eval_model_info.endpoint
+    
+    @property
+    def datasets(self) -> Optional[List[str]]:
+        return [ds.dataset_id for ds in self.eval_datasets] if self.eval_datasets else None
 
     class Config:  # noqa
         json_schema_extra = {
             "example": {
-                "eval_request_id": "123e4567-e89b-12d3-a456-426614174000",
+                "uuid": "123e4567-e89b-12d3-a456-426614174000",
                 "engine": "opencompass",
-                "model_name": "gpt-4",
-                "api_key": "sk-...",
-                "base_url": "https://api.openai.com/v1",
-                "datasets": ["mmlu", "gsm8k"],
+                "eval_model_info": {
+                    "model_name": "gpt-4",
+                    "endpoint": "https://api.openai.com/v1",
+                    "api_key": "sk-...",
+                    "extra_args": {}
+                },
+                "eval_datasets": [
+                    {"dataset_id": "mmlu"},
+                    {"dataset_id": "gsm8k"}
+                ],
+                "eval_configs": [],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }
         }
@@ -40,31 +97,68 @@ class EvaluationRequest(CloudEventBase):
 
 # Workflow Schemas
 class StartEvaluationRequest(CloudEventBase):
-    """Schema for start evaluation request."""
+    """Schema for start evaluation request - matches EvaluationRequest structure."""
 
-    eval_request_id: UUID = Field(..., description="Unique identifier for the evaluation request")
+    # Using uuid as primary identifier to match bud-eval
+    uuid: UUID = Field(..., description="Unique identifier for the evaluation request")
+    
+    # Keep eval_request_id for backward compatibility (alias for uuid)
+    @property
+    def eval_request_id(self) -> UUID:
+        return self.uuid
+    
+    # Nested model info structure
+    eval_model_info: EvalModelInfo = Field(..., description="Model information for evaluation")
+    
+    # Structured datasets instead of simple strings
+    eval_datasets: List[EvalDataset] = Field(..., description="Evaluation datasets")
+    
+    # New field for evaluation configurations
+    eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
+    
+    # Keep engine field for compatibility
     engine: EvaluationEngine = Field(
-        EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
+        default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
     )
-    model_name: str = Field(..., description="Name of the model to be evaluated")
-    api_key: str = Field(..., description="API key for authentication")
-    base_url: str = Field(..., description="Base URL for the model API")
-    datasets: Optional[List[str]] = Field(
-        None, description="List of datasets to evaluate on (defaults to engine-specific defaults)"
-    )
+    
+    # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
+    
+    # Backward compatibility properties
+    @property
+    def model_name(self) -> str:
+        return self.eval_model_info.model_name
+    
+    @property
+    def api_key(self) -> str:
+        return self.eval_model_info.api_key
+    
+    @property
+    def base_url(self) -> str:
+        return self.eval_model_info.endpoint
+    
+    @property
+    def datasets(self) -> Optional[List[str]]:
+        return [ds.dataset_id for ds in self.eval_datasets] if self.eval_datasets else None
 
     class Config:  # noqa
         json_schema_extra = {
             "example": {
-                "eval_request_id": "123e4567-e89b-12d3-a456-426614174000",
+                "uuid": "123e4567-e89b-12d3-a456-426614174000",
                 "engine": "opencompass",
-                "model_name": "gpt-4",
-                "api_key": "sk-...",
-                "base_url": "https://api.openai.com/v1",
-                "datasets": ["mmlu", "gsm8k"],
+                "eval_model_info": {
+                    "model_name": "gpt-4",
+                    "endpoint": "https://api.openai.com/v1",
+                    "api_key": "sk-...",
+                    "extra_args": {}
+                },
+                "eval_datasets": [
+                    {"dataset_id": "mmlu"},
+                    {"dataset_id": "gsm8k"}
+                ],
+                "eval_configs": [],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }
         }

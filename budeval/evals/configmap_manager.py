@@ -125,6 +125,7 @@ class ConfigMapManager:
             dataset_list = []
 
             # Map dataset names to their OpenCompass imports - use simpler approach
+            # TODO: need to remove this as datasets , should be passed as args
             dataset_mapping = {
                 "mmlu": ("from opencompass.datasets.mmlu import mmlu_datasets", "mmlu_datasets"),
                 "gsm8k": ("from opencompass.datasets.gsm8k import gsm8k_datasets", "gsm8k_datasets"),
@@ -195,7 +196,7 @@ work_dir = '/workspace/outputs'
                 ),
                 data={
                     "bud-model.py": bud_model_content,
-                    "bud-datasets.py": dataset_content,
+                    "bud-datasets.py": dataset_content, # TODO: this won't work , importing datasets
                     "eval_config.py": eval_config_content,
                     "metadata.json": json.dumps(
                         {
