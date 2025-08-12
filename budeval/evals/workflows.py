@@ -305,13 +305,7 @@ class EvaluationWorkflow:
         # Set workflow data
         update_workflow_data_in_statestore(
             instance_id,
-            {
-                "model_name": evaluate_model_request_json.model_name,
-                "eval_request_id": str(evaluate_model_request_json.eval_request_id),
-                "api_key": evaluate_model_request_json.api_key,
-                "base_url": evaluate_model_request_json.base_url,
-                "kubeconfig": evaluate_model_request_json.kubeconfig, # Preference for using in cluster execution
-            },
+            evaluate_model_request_json.model_dump(mode="json"),
         )
 
         # Notifications
@@ -326,7 +320,7 @@ class EvaluationWorkflow:
         notification_req.payload.event = "evaluation_status"
         notification_req.payload.content = NotificationContent(
             title="Model evaluation process is initiated",
-            message=f"Model evaluation process is initiated for {evaluate_model_request_json.model_name}",
+            message=f"Model evaluation process is initiated for {evaluate_model_request_json.eval_model_info.model_name}",
             status=WorkflowStatus.STARTED,
         )
 
@@ -697,9 +691,11 @@ class EvaluationWorkflow:
     ) -> WorkflowMetadataResponse | ErrorResponse:
         """Evaluate a model with the given name."""
         logger = logging.getLogger("::EVAL:: EvaluateModelCall")
+
+        # Workflow ID
         workflow_id = str(workflow_id or uuid.uuid4())
 
-        logger.info(f"Evaluating model {request.model_name} for request {request.eval_request_id}")
+        logger.debug(f"Evaluating model {request.eval_model_info.model_name} for request {request.uuid}")
         workflow_steps = [
             WorkflowStep(
                 id="verify_cluster_connection",

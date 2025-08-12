@@ -32,48 +32,25 @@ class EvaluationRequest(CloudEventBase):
 
     # Using uuid as primary identifier to match bud-eval
     uuid: UUID = Field(..., description="Unique identifier for the evaluation request")
-    
-    # Keep eval_request_id for backward compatibility (alias for uuid)
-    @property
-    def eval_request_id(self) -> UUID:
-        return self.uuid
-    
+
     # Nested model info structure
     eval_model_info: EvalModelInfo = Field(..., description="Model information for evaluation")
-    
+
     # Structured datasets instead of simple strings
     eval_datasets: List[EvalDataset] = Field(..., description="Evaluation datasets")
-    
+
     # New field for evaluation configurations
     eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
-    
+
     # Keep engine field for compatibility
     engine: EvaluationEngine = Field(
         default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
     )
-    
+
     # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
-    
-    # Backward compatibility properties
-    @property
-    def model_name(self) -> str:
-        return self.eval_model_info.model_name
-    
-    @property
-    def api_key(self) -> str:
-        return self.eval_model_info.api_key
-    
-    @property
-    def base_url(self) -> str:
-        return self.eval_model_info.endpoint
-    
-    @property
-    def datasets(self) -> Optional[List[str]]:
-        return [ds.dataset_id for ds in self.eval_datasets] if self.eval_datasets else None
-
     class Config:  # noqa
         json_schema_extra = {
             "example": {
@@ -101,47 +78,26 @@ class StartEvaluationRequest(CloudEventBase):
 
     # Using uuid as primary identifier to match bud-eval
     uuid: UUID = Field(..., description="Unique identifier for the evaluation request")
-    
-    # Keep eval_request_id for backward compatibility (alias for uuid)
-    @property
-    def eval_request_id(self) -> UUID:
-        return self.uuid
-    
+
+
     # Nested model info structure
     eval_model_info: EvalModelInfo = Field(..., description="Model information for evaluation")
-    
+
     # Structured datasets instead of simple strings
     eval_datasets: List[EvalDataset] = Field(..., description="Evaluation datasets")
-    
+
     # New field for evaluation configurations
     eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
-    
+
     # Keep engine field for compatibility
     engine: EvaluationEngine = Field(
         default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
     )
-    
+
     # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
-    
-    # Backward compatibility properties
-    @property
-    def model_name(self) -> str:
-        return self.eval_model_info.model_name
-    
-    @property
-    def api_key(self) -> str:
-        return self.eval_model_info.api_key
-    
-    @property
-    def base_url(self) -> str:
-        return self.eval_model_info.endpoint
-    
-    @property
-    def datasets(self) -> Optional[List[str]]:
-        return [ds.dataset_id for ds in self.eval_datasets] if self.eval_datasets else None
 
     class Config:  # noqa
         json_schema_extra = {

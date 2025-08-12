@@ -208,11 +208,11 @@ class EvaluationService:
         Returns:
             Union[WorkflowMetadataResponse, ErrorResponse]
         """
-        logger.info(f"Model Evaluation Started for workflow_id: {evaluate_model_request.model_name}")
+        logger.info(f"Model Evaluation Started for workflow_id: {evaluate_model_request.eval_model_info.model_name}")
 
         response: Union[WorkflowMetadataResponse, ErrorResponse]
 
-        from .workflows import EvaluationWorkflow  # Avoid Circular Import
+        from .workflows import EvaluationWorkflow
 
         try:
             response = await EvaluationWorkflow().__call__(evaluate_model_request)

@@ -41,17 +41,7 @@ async def start_eval(request: EvaluationRequest):
         dict: A simple hello world message
     """
     try:
-        # Proceed with evaluation request immediately
-        payload = StartEvaluationRequest(
-            eval_request_id=request.eval_request_id,
-            engine=request.engine,
-            model_name=request.model_name,
-            api_key=request.api_key,
-            base_url=request.base_url,
-            datasets=request.datasets,
-            kubeconfig=request.kubeconfig,
-        )
-        response = await EvaluationService().evaluate_model(payload)
+        response = await EvaluationService().evaluate_model(StartEvaluationRequest(**request.model_dump()))
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save evaluation request: {str(e)}") from e
