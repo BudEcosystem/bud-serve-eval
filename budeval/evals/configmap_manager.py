@@ -131,7 +131,10 @@ class ConfigMapManager:
                 "gsm8k": ("from opencompass.datasets.gsm8k import gsm8k_datasets", "gsm8k_datasets"),
                 "hellaswag": ("from opencompass.datasets.hellaswag import hellaswag_datasets", "hellaswag_datasets"),
                 "arc": ("from opencompass.datasets.ARC_c import ARC_c_datasets", "ARC_c_datasets"),
-                "winogrande": ("from opencompass.datasets.winogrande import winogrande_datasets", "winogrande_datasets"),
+                "winogrande": (
+                    "from opencompass.datasets.winogrande import winogrande_datasets",
+                    "winogrande_datasets",
+                ),
             }
 
             for dataset in datasets:
@@ -196,7 +199,7 @@ work_dir = '/workspace/outputs'
                 ),
                 data={
                     "bud-model.py": bud_model_content,
-                    "bud-datasets.py": dataset_content, # TODO: this won't work , importing datasets
+                    "bud-datasets.py": dataset_content,  # TODO: this won't work , importing datasets
                     "eval_config.py": eval_config_content,
                     "metadata.json": json.dumps(
                         {

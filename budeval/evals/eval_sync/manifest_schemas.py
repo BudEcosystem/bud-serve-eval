@@ -146,8 +146,12 @@ class OriginalData(BaseModel):
     humans_vs_llm_qualifications: list[str] = Field(default_factory=list, description="Human vs LLM qualifications")
     task_type: list[str] = Field(default_factory=list, description="Task types")
     modalities: list[str] = Field(default_factory=list, description="Modalities")
-    sample_questions_answers: SampleQuestionsAnswers = Field(default_factory=SampleQuestionsAnswers, description="Sample Q&A")
-    advantages_disadvantages: AdvantagesDisadvantages = Field(default_factory=AdvantagesDisadvantages, description="Pros and cons")
+    sample_questions_answers: SampleQuestionsAnswers = Field(
+        default_factory=SampleQuestionsAnswers, description="Sample Q&A"
+    )
+    advantages_disadvantages: AdvantagesDisadvantages = Field(
+        default_factory=AdvantagesDisadvantages, description="Pros and cons"
+    )
     emoji: str = Field("", description="Emoji representation")
     dimensions: list[Dimension] = Field(default_factory=list, description="Dimensions")
     sub_dimensions: list[Dimension] = Field(default_factory=list, description="Sub-dimensions", alias="subDimensions")

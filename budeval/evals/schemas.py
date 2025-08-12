@@ -10,6 +10,7 @@ from budeval.core.schemas import EvaluationEngine
 # Sub-schemas for nested structure
 class EvalModelInfo(BaseModel):
     """Model information for evaluation."""
+
     model_name: str = Field(..., description="Name of the model to be evaluated")
     endpoint: str = Field(..., description="Endpoint of the model to be evaluated")
     api_key: str = Field(..., description="API key for authentication")
@@ -18,11 +19,13 @@ class EvalModelInfo(BaseModel):
 
 class EvalDataset(BaseModel):
     """Dataset information for evaluation."""
+
     dataset_id: str = Field(..., description="ID of the dataset to be evaluated")
 
 
 class EvalConfig(BaseModel):
     """Configuration for evaluation."""
+
     config_name: str = Field(..., description="Name of the evaluation configuration")
     config_value: Dict[str, Any] = Field(..., description="Value of the evaluation configuration")
 
@@ -43,14 +46,13 @@ class EvaluationRequest(CloudEventBase):
     eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
 
     # Keep engine field for compatibility
-    engine: EvaluationEngine = Field(
-        default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
-    )
+    engine: EvaluationEngine = Field(default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use")
 
     # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
         None, description="Kubernetes configuration JSON content (optional, uses local config if not provided)"
     )
+
     class Config:  # noqa
         json_schema_extra = {
             "example": {
@@ -60,12 +62,9 @@ class EvaluationRequest(CloudEventBase):
                     "model_name": "gpt-4",
                     "endpoint": "https://api.openai.com/v1",
                     "api_key": "sk-...",
-                    "extra_args": {}
+                    "extra_args": {},
                 },
-                "eval_datasets": [
-                    {"dataset_id": "mmlu"},
-                    {"dataset_id": "gsm8k"}
-                ],
+                "eval_datasets": [{"dataset_id": "mmlu"}, {"dataset_id": "gsm8k"}],
                 "eval_configs": [],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }
@@ -79,7 +78,6 @@ class StartEvaluationRequest(CloudEventBase):
     # Using uuid as primary identifier to match bud-eval
     uuid: UUID = Field(..., description="Unique identifier for the evaluation request")
 
-
     # Nested model info structure
     eval_model_info: EvalModelInfo = Field(..., description="Model information for evaluation")
 
@@ -90,9 +88,7 @@ class StartEvaluationRequest(CloudEventBase):
     eval_configs: List[EvalConfig] = Field(default_factory=list, description="Evaluation configurations")
 
     # Keep engine field for compatibility
-    engine: EvaluationEngine = Field(
-        default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use"
-    )
+    engine: EvaluationEngine = Field(default=EvaluationEngine.OPENCOMPASS, description="Evaluation engine to use")
 
     # Kubeconfig remains optional
     kubeconfig: Optional[str] = Field(
@@ -108,12 +104,9 @@ class StartEvaluationRequest(CloudEventBase):
                     "model_name": "gpt-4",
                     "endpoint": "https://api.openai.com/v1",
                     "api_key": "sk-...",
-                    "extra_args": {}
+                    "extra_args": {},
                 },
-                "eval_datasets": [
-                    {"dataset_id": "mmlu"},
-                    {"dataset_id": "gsm8k"}
-                ],
+                "eval_datasets": [{"dataset_id": "mmlu"}, {"dataset_id": "gsm8k"}],
                 "eval_configs": [],
                 "kubeconfig": "<Kubernetes config JSON content>",
             }

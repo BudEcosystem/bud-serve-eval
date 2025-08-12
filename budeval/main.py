@@ -28,7 +28,6 @@ from fastapi import FastAPI
 
 from .commons.config import app_settings, secrets_settings
 from .commons.exceptions import SeederException
-from .evals.eval_sync import get_manifest_cache
 from .evals.eval_sync.routes import router as eval_sync_router
 from .evals.routes import evals_routes
 
@@ -66,21 +65,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db.connect()
         logger.info("Database connection initialized successfully")
 
-        # Initialize eval dataset manifest cache if enabled
+        # Verify database connectivity for eval sync (but don't auto-sync)
         if app_settings.eval_sync_enabled:
-            logger.info("Initializing evaluation dataset manifest cache")
-            try:
-                manifest_cache = await get_manifest_cache()
-                manifest = await manifest_cache.get_manifest()
-
-                total_datasets = sum(collection.count for collection in manifest.datasets.values())
-                logger.info(
-                    f"Evaluation dataset manifest cache initialized successfully. "
-                    f"Version: {manifest.version_info.current_version}, "
-                    f"Datasets: {total_datasets}, Traits: {manifest.traits.count}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to initialize eval dataset manifest cache: {e}")
+            logger.info("Eval sync is enabled - datasets will be synced manually via API endpoints")
+            # Database connection already initialized above
 
         volume_init = VolumeInitializer()
 
@@ -98,15 +86,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     try:
-        # Shutdown eval manifest cache
-        if app_settings.eval_sync_enabled:
-            try:
-                manifest_cache = await get_manifest_cache()
-                await manifest_cache.shutdown()
-                logger.info("Evaluation dataset manifest cache shutdown complete")
-            except Exception as e:
-                logger.error(f"Error shutting down eval manifest cache: {e}")
-
+        # No more manifest cache to shutdown
+        logger.info("Shutting down application")
         _ = task.cancel()
     except asyncio.CancelledError:
         logger.exception("Failed to cleanup config & store sync.")

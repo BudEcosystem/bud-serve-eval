@@ -247,7 +247,7 @@ class AnsibleOrchestrator:
             output_volume.get("claimName", f"{uuid}-output-pvc"),
             f"{uuid}-output-pv",
             output_volume.get("size", "10Gi"),
-            namespace
+            namespace,
         )
 
         job_yaml = self._render_generic_job_yaml(uuid, job_config, namespace)
@@ -680,9 +680,7 @@ spec:
         # Model configuration is now handled via bud-model.py config file
 
         # Create OpenCompass CLI arguments - use config file mode with bud-model
-        opencompass_cmd = (
-            f"cd /workspace && python /opt/opencompass/run.py --models bud-model --datasets {datasets_arg} --work-dir /workspace/outputs --debug"
-        )
+        opencompass_cmd = f"cd /workspace && python /opt/opencompass/run.py --models bud-model --datasets {datasets_arg} --work-dir /workspace/outputs --debug"
 
         # Create bash script that copies config and runs OpenCompass
         bash_script = f"""#!/bin/bash
@@ -808,19 +806,19 @@ spec:
 
             volumes.append(f"""        - name: config
           configMap:
-            name: {config_volume['configMapName']}""")
+            name: {config_volume["configMapName"]}""")
 
         # Data volumes (e.g., shared datasets)
         for i, vol in enumerate(data_volumes):
             vol_name = vol.get("name", f"data-{i}")
             volume_mounts.append(f"""            - name: {vol_name}
-              mountPath: {vol['mountPath']}
-              readOnly: {str(vol.get('readOnly', True)).lower()}""")
+              mountPath: {vol["mountPath"]}
+              readOnly: {str(vol.get("readOnly", True)).lower()}""")
 
             if vol.get("claimName"):
                 volumes.append(f"""        - name: {vol_name}
           persistentVolumeClaim:
-            claimName: {vol['claimName']}""")
+            claimName: {vol["claimName"]}""")
             elif vol.get("type") == "emptyDir":
                 volumes.append(f"""        - name: {vol_name}
           emptyDir: {{}}""")
@@ -832,7 +830,7 @@ spec:
 
             volumes.append(f"""        - name: output
           persistentVolumeClaim:
-            claimName: {output_volume['claimName']}""")
+            claimName: {output_volume["claimName"]}""")
 
         volume_mounts_str = "\n".join(volume_mounts) if volume_mounts else ""
         volumes_str = "\n".join(volumes) if volumes else ""
@@ -843,8 +841,8 @@ spec:
             command_str = json.dumps(command)
             args_str = json.dumps(args)
         else:
-            command_str = json.dumps(command) if command else '[]'
-            args_str = json.dumps(args) if args else '[]'
+            command_str = json.dumps(command) if command else "[]"
+            args_str = json.dumps(args) if args else "[]"
 
         return f"""apiVersion: batch/v1
 kind: Job
@@ -853,7 +851,7 @@ metadata:
   namespace: {namespace}
   labels:
     app: budeval
-    engine: {job_config.get('engine', 'unknown')}
+    engine: {job_config.get("engine", "unknown")}
 spec:
   ttlSecondsAfterFinished: {ttl}
   template:
@@ -863,10 +861,18 @@ spec:
           image: {image}
           command: {command_str}
           args: {args_str}
-{f'''          env:
-{env_section}''' if env_section else ''}
-{f'''          volumeMounts:
-{volume_mounts_str}''' if volume_mounts_str else ''}
+{
+            f'''          env:
+{env_section}'''
+            if env_section
+            else ""
+        }
+{
+            f'''          volumeMounts:
+{volume_mounts_str}'''
+            if volume_mounts_str
+            else ""
+        }
           resources:
             requests:
               cpu: {cpu_request}
@@ -875,8 +881,12 @@ spec:
               cpu: {cpu_limit}
               memory: {memory_limit}
           workingDir: /workspace
-{f'''      volumes:
-{volumes_str}''' if volumes_str else ''}
+{
+            f'''      volumes:
+{volumes_str}'''
+            if volumes_str
+            else ""
+        }
       restartPolicy: Never
-  backoffLimit: {job_config.get('backoff_limit', 2)}
+  backoffLimit: {job_config.get("backoff_limit", 2)}
 """

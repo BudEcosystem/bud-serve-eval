@@ -35,7 +35,7 @@ router = APIRouter(prefix="/eval-datasets", tags=["eval-datasets"])
 @router.get("/datasets", response_model=list[Dataset])
 async def list_datasets(
     traits: list[str] | None = Query(None, description="Filter by traits"),
-    source: str | None = Query(None, description="Filter by source")
+    source: str | None = Query(None, description="Filter by source"),
 ) -> list[Dataset]:
     """List all available evaluation datasets."""
     try:
@@ -63,9 +63,7 @@ async def get_dataset(dataset_id: str) -> Dataset:
 
 
 @router.get("/datasets/search", response_model=list[Dataset])
-async def search_datasets(
-    q: str = Query(..., description="Search query")
-) -> list[Dataset]:
+async def search_datasets(q: str = Query(..., description="Search query")) -> list[Dataset]:
     """Search datasets by name or description."""
     try:
         repo = get_eval_dataset_repository()
@@ -135,24 +133,142 @@ async def get_datasets_by_source(source: str) -> list[Dataset]:
         raise HTTPException(status_code=500, detail="Failed to retrieve datasets")
 
 
-@router.post("/refresh")
-async def refresh_manifest() -> dict[str, Any]:
-    """Force refresh of the evaluation dataset manifest."""
+@router.post("/sync")
+async def sync_datasets(force: bool = Query(False, description="Force sync even if versions match")) -> dict[str, Any]:
+    """Manually trigger dataset synchronization from manifest."""
     try:
-        from .manifest_cache import get_manifest_cache
+        from budeval.commons.config import app_settings
 
-        cache = await get_manifest_cache()
-        await cache.force_refresh()
+        from .sync_service import get_sync_service
 
-        manifest = await cache.get_manifest()
+        sync_service = get_sync_service()
+
+        # Fetch manifest
+        manifest = await sync_service.fetch_manifest(app_settings.eval_manifest_url)
+
+        # Get current version
+        with sync_service.db.get_session() as db:
+            current_version = sync_service.get_current_version(db)
+
+        # Sync datasets
+        sync_results = await sync_service.sync_datasets(manifest, current_version, force_sync=force)
+
+        # Record sync results
+        with sync_service.db.get_session() as db:
+            sync_service.record_sync_results(
+                db,
+                manifest.version_info.current_version,
+                "completed",
+                {
+                    "synced_datasets": sync_results["synced_datasets"],
+                    "failed_datasets": sync_results["failed_datasets"],
+                    "total_datasets": sync_results.get("total_datasets", 0),
+                    "source": "cloud" if not app_settings.eval_sync_local_mode else "local",
+                },
+            )
+
         return {
-            "message": "Manifest refreshed successfully",
+            "message": f"Sync completed: {len(sync_results['synced_datasets'])} datasets synced",
             "version": manifest.version_info.current_version,
-            "last_updated": manifest.last_updated,
-            "manifest_version": manifest.manifest_version,
-            "total_datasets": sum(collection.count for collection in manifest.datasets.values()),
-            "total_traits": manifest.traits.count
+            "sync_results": sync_results,
         }
     except Exception as e:
-        logger.error(f"Failed to refresh manifest: {e}")
-        raise HTTPException(status_code=500, detail="Failed to refresh manifest")
+        logger.error(f"Failed to sync datasets: {e}")
+        raise HTTPException(status_code=500, detail="Failed to sync datasets")
+
+
+@router.get("/sync/status")
+async def get_sync_status() -> dict[str, Any]:
+    """Get the current synchronization status and history."""
+    try:
+        from sqlalchemy import select
+
+        from .models import EvalSyncState
+        from .sync_service import get_sync_service
+
+        sync_service = get_sync_service()
+
+        with sync_service.db.get_session() as session:
+            # Get latest sync state
+            stmt = select(EvalSyncState).order_by(EvalSyncState.created_at.desc()).limit(1)
+            latest_sync = session.execute(stmt).scalar_one_or_none()
+
+            # Get sync history (last 10)
+            history_stmt = select(EvalSyncState).order_by(EvalSyncState.created_at.desc()).limit(10)
+            sync_history = session.execute(history_stmt).scalars().all()
+
+            return {
+                "latest_sync": {
+                    "version": latest_sync.manifest_version if latest_sync else None,
+                    "status": latest_sync.sync_status if latest_sync else None,
+                    "timestamp": latest_sync.sync_timestamp if latest_sync else None,
+                    "metadata": latest_sync.sync_metadata if latest_sync else None,
+                }
+                if latest_sync
+                else None,
+                "history": [
+                    {
+                        "version": sync.manifest_version,
+                        "status": sync.sync_status,
+                        "timestamp": sync.sync_timestamp,
+                        "metadata": sync.sync_metadata,
+                    }
+                    for sync in sync_history
+                ],
+            }
+    except Exception as e:
+        logger.error(f"Failed to get sync status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sync status")
+
+
+@router.post("/sync/local")
+async def sync_local_manifest() -> dict[str, Any]:
+    """Sync from local manifest file (for development/testing)."""
+    try:
+        from budeval.commons.config import app_settings
+
+        from .sync_service import get_sync_service
+
+        # Temporarily enable local mode for this operation
+        original_local_mode = app_settings.eval_sync_local_mode
+        app_settings.eval_sync_local_mode = True
+
+        try:
+            sync_service = get_sync_service()
+
+            # Use a dummy URL since we're in local mode
+            manifest = await sync_service.fetch_manifest("local_manifest.json")
+
+            # Get current version
+            with sync_service.db.get_session() as db:
+                current_version = sync_service.get_current_version(db)
+
+            # Force sync for local development
+            sync_results = await sync_service.sync_datasets(manifest, current_version, force_sync=True)
+
+            # Record sync results
+            with sync_service.db.get_session() as db:
+                sync_service.record_sync_results(
+                    db,
+                    manifest.version_info.current_version,
+                    "completed",
+                    {
+                        "synced_datasets": sync_results["synced_datasets"],
+                        "failed_datasets": sync_results["failed_datasets"],
+                        "total_datasets": sync_results.get("total_datasets", 0),
+                        "source": "local",
+                    },
+                )
+
+            return {
+                "message": f"Local sync completed: {len(sync_results['synced_datasets'])} datasets synced",
+                "version": manifest.version_info.current_version,
+                "sync_results": sync_results,
+            }
+        finally:
+            # Restore original local mode setting
+            app_settings.eval_sync_local_mode = original_local_mode
+
+    except Exception as e:
+        logger.error(f"Failed to sync local manifest: {e}")
+        raise HTTPException(status_code=500, detail="Failed to sync local manifest")

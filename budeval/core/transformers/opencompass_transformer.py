@@ -40,9 +40,7 @@ class OpenCompassTransformer(BaseTransformer):
     def _load_eval_manifest(self) -> None:
         """Load evaluation manifest with dataset mappings."""
         manifest_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "data",
-            "eval_manifest.json"
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "eval_manifest.json"
         )
 
         with open(manifest_path, "r") as f:
@@ -59,7 +57,7 @@ class OpenCompassTransformer(BaseTransformer):
                                 "gen": dataset["evaluation_methods"].get("gen"),
                                 "ppl": dataset["evaluation_methods"].get("ppl"),
                                 "id": dataset.get("id"),
-                                "description": dataset.get("description")
+                                "description": dataset.get("description"),
                             }
 
         logger.info(f"Loaded {len(self._dataset_mappings)} dataset mappings from manifest")
@@ -83,7 +81,7 @@ class OpenCompassTransformer(BaseTransformer):
                 "model_name": request.model.name,
                 "datasets": [d.name for d in request.datasets],
                 "eval_request_id": str(request.eval_request_id),
-            }
+            },
         )
 
     def generate_config_files(self, request: GenericEvaluationRequest) -> Dict[str, str]:
@@ -92,16 +90,18 @@ class OpenCompassTransformer(BaseTransformer):
 
         # Since we're using CLI + environment variables, we only need metadata
         # The actual model config is generated inline in build_command()
-        config_files["metadata.json"] = json.dumps({
-            "eval_request_id": str(request.eval_request_id),
-            "model_name": request.model.name,
-            "datasets": [d.name for d in request.datasets],
-            "engine": self.engine.value,
-            "eval_mode": request.extra_params.get("eval_mode", "gen"),
-        }, indent=2)
+        config_files["metadata.json"] = json.dumps(
+            {
+                "eval_request_id": str(request.eval_request_id),
+                "model_name": request.model.name,
+                "datasets": [d.name for d in request.datasets],
+                "engine": self.engine.value,
+                "eval_mode": request.extra_params.get("eval_mode", "gen"),
+            },
+            indent=2,
+        )
 
         return config_files
-
 
     def build_command(self, request: GenericEvaluationRequest) -> Tuple[List[str], List[str]]:
         """Build OpenCompass command and arguments.
@@ -194,7 +194,7 @@ python /workspace/run.py \\
                 "name": "cache",
                 "mountPath": "/workspace/cache",
                 "type": "emptyDir",
-            }
+            },
         ]
 
     def get_environment_variables(self, request: GenericEvaluationRequest) -> Dict[str, str]:

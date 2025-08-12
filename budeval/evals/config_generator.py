@@ -64,7 +64,7 @@ models = [
         for dataset in datasets:
             dataset_name = dataset.lower()
             # Add _gen suffix if not already present
-            if not dataset_name.endswith('_gen'):
+            if not dataset_name.endswith("_gen"):
                 dataset_name = f"{dataset_name}_gen"
             dataset_list.append(f"'{dataset_name}'")
 
@@ -72,7 +72,7 @@ models = [
 from opencompass.datasets import *
 
 # Use predefined dataset configurations
-datasets = [{', '.join(dataset_list)}]
+datasets = [{", ".join(dataset_list)}]
 """
 
         return config_content

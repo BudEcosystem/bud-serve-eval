@@ -86,6 +86,7 @@ def _auto_register_transformers():
     """Automatically register known transformers."""
     try:
         from budeval.core.transformers.opencompass_transformer import OpenCompassTransformer
+
         TransformerRegistry.register(EvaluationEngine.OPENCOMPASS, OpenCompassTransformer)
     except ImportError as e:
         logger.warning(f"Failed to import OpenCompass transformer: {e}")

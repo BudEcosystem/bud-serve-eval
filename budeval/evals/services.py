@@ -104,7 +104,9 @@ class EvaluationOpsService:
         cls, evaluate_model_request: DeployEvalJobRequest, transformed_data: dict, task_id: str, workflow_id: str
     ) -> dict:
         """Deploy evaluation job using transformed configuration data."""
-        logger.info(f"Deploying evaluation job with transformation for workflow_id: {workflow_id} and task_id: {task_id}")
+        logger.info(
+            f"Deploying evaluation job with transformation for workflow_id: {workflow_id} and task_id: {task_id}"
+        )
 
         try:
             from budeval.registry.orchestrator.ansible_orchestrator import AnsibleOrchestrator

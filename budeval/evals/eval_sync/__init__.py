@@ -16,8 +16,8 @@
 
 """Evaluation dataset synchronization module."""
 
-from .manifest_cache import get_manifest_cache
 from .repository import get_eval_dataset_repository
+from .sync_service import get_sync_service
 
 
-__all__ = ["get_manifest_cache", "get_eval_dataset_repository"]
+__all__ = ["get_eval_dataset_repository", "get_sync_service"]
