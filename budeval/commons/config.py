@@ -40,13 +40,11 @@ class AppConfig(BaseAppConfig):
 
     # Eval Sync Configuration
     eval_sync_enabled: bool = True
-    eval_sync_local_mode: bool = False  # Default to cloud mode like budapp
+    eval_sync_local_mode: bool = True  # Default to cloud mode like budapp
     eval_manifest_url: str = "https://eval-datasets.bud.eco/v2/eval_manifest.json"
     eval_sync_batch_size: int = 50  # Number of datasets to process per batch
     eval_manifest_local_path: str = "budeval/data/eval_manifest_test.json"
-
-    # Remove background refresh settings - sync is now manual only
-    # eval_sync_refresh_seconds: int = 3600  # Removed - no background refresh
+    eval_sync_interval_seconds: int = 3600  # Sync interval in seconds (default 1 hour like budapp)
 
 
 class SecretsConfig(BaseSecretsConfig):
@@ -54,7 +52,7 @@ class SecretsConfig(BaseSecretsConfig):
     version: str = __version__.split("@")[-1]
 
 
-app_settings = AppConfig()
-secrets_settings = SecretsConfig()
+app_settings = AppConfig()  # type: ignore[reportCallIssue]
+secrets_settings = SecretsConfig()  # type: ignore[reportCallIssue]
 
 register_settings(app_settings, secrets_settings)

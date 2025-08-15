@@ -121,8 +121,39 @@ class EvaluationOpsService:
             # Debug logging
             logger.info(f"Transformed data keys: {list(transformed_data.keys())}")
             logger.info(f"Job config keys: {list(job_config.keys())}")
+
+            # If args are missing (due to payload size reduction), regenerate them
+            if not job_config.get("args"):
+                logger.info("Args missing from job_config, regenerating command...")
+                try:
+                    from budeval.commons.schemas import EvaluationDataset, GenericEvaluationRequest
+                    from budeval.core.transformers.opencompass_transformer import OpenCompassTransformer
+
+                    # Create a generic request from the original request
+                    datasets = [EvaluationDataset(name=d["dataset_id"], description="")
+                              for d in evaluate_model_request.dataset if isinstance(d, dict)]
+
+                    generic_request = GenericEvaluationRequest(
+                        model_name=evaluate_model_request.eval_request_id,  # Use ID as placeholder
+                        datasets=datasets,
+                        api_key=evaluate_model_request.api_key,
+                        base_url=evaluate_model_request.base_url
+                    )
+
+                    # Regenerate command using transformer
+                    transformer = OpenCompassTransformer()
+                    command, args = transformer.build_command(generic_request)
+                    job_config["command"] = command
+                    job_config["args"] = args
+                    logger.info(f"Regenerated command with args length: {len(args[0]) if args else 0}")
+
+                except Exception as e:
+                    logger.error(f"Failed to regenerate command: {e}")
+                    # Fallback to a simple command
+                    job_config["args"] = ["echo 'Command regeneration failed'; exit 1"]
+
             logger.info(f"Job config command: {job_config.get('command')}")
-            logger.info(f"Job config args: {job_config.get('args')[:200] if job_config.get('args') else 'None'}")
+            logger.info(f"Job config args: {job_config.get('args', [''])[0][:200] if job_config.get('args') else 'None'}")
 
             logger.info(f"Creating job with UUID: {job_uuid}")
             logger.info(f"Using engine: {job_config.get('engine')}, Docker image: {job_config.get('image')}")

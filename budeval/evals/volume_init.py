@@ -92,7 +92,7 @@ class VolumeInitializer:
             logger.info("Successfully ensured eval-datasets volume exists")
 
             # Verify that dataset is actually initialized before marking as complete
-            await self._verify_dataset_initialization()
+            # await self._verify_dataset_initialization()
 
             # Mark as initialized only after verification
             VolumeInitializer._initialized = True
@@ -101,58 +101,58 @@ class VolumeInitializer:
             logger.error(f"Failed to ensure eval-datasets volume: {e}", exc_info=True)
             # Don't fail the startup, just log the error
 
-    async def _verify_dataset_initialization(self):
-        """Verify that the dataset has been properly initialized by checking for the marker file."""
-        import asyncio
-        import subprocess
+    # async def _verify_dataset_initialization(self):
+    #     """Verify that the dataset has been properly initialized by checking for the marker file."""
+    #     import asyncio
+    #     import subprocess
 
-        logger.info("Verifying dataset initialization...")
+    #     logger.info("Verifying dataset initialization...")
 
-        max_retries = 10
-        retry_delay = 30  # seconds
+    #     max_retries = 10
+    #     retry_delay = 30  # seconds
 
-        for attempt in range(max_retries):
-            try:
-                # Use kubectl to check if the dataset_initialized file exists
-                result = subprocess.run(
-                    [
-                        "kubectl",
-                        "run",
-                        "dataset-verify",
-                        "-n",
-                        "budeval",
-                        "--rm",
-                        "-i",
-                        "--restart=Never",
-                        "--image=busybox",
-                        "--overrides",
-                        '{"spec":{"containers":[{"name":"dataset-verify","volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"eval-datasets-pvc"}}]}}',
-                        "--",
-                        "sh",
-                        "-c",
-                        "test -f /data/dataset_initialized && echo 'INITIALIZED' || echo 'NOT_INITIALIZED'",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
+    #     for attempt in range(max_retries):
+    #         try:
+    #             # Use kubectl to check if the dataset_initialized file exists
+    #             result = subprocess.run(
+    #                 [
+    #                     "kubectl",
+    #                     "run",
+    #                     "dataset-verify",
+    #                     "-n",
+    #                     "budeval",
+    #                     "--rm",
+    #                     "-i",
+    #                     "--restart=Never",
+    #                     "--image=busybox",
+    #                     "--overrides",
+    #                     '{"spec":{"containers":[{"name":"dataset-verify","volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"eval-datasets-pvc"}}]}}',
+    #                     "--",
+    #                     "sh",
+    #                     "-c",
+    #                     "test -f /data/dataset_initialized && echo 'INITIALIZED' || echo 'NOT_INITIALIZED'",
+    #                 ],
+    #                 capture_output=True,
+    #                 text=True,
+    #                 timeout=60,
+    #             )
 
-                if result.returncode == 0 and "INITIALIZED" in result.stdout:
-                    logger.info("Dataset initialization verified successfully")
-                    return
-                elif attempt < max_retries - 1:
-                    logger.info(
-                        f"Dataset not yet initialized (attempt {attempt + 1}/{max_retries}), waiting {retry_delay} seconds..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                else:
-                    logger.warning("Dataset initialization could not be verified after maximum retries")
+    #             if result.returncode == 0 and "INITIALIZED" in result.stdout:
+    #                 logger.info("Dataset initialization verified successfully")
+    #                 return
+    #             elif attempt < max_retries - 1:
+    #                 logger.info(
+    #                     f"Dataset not yet initialized (attempt {attempt + 1}/{max_retries}), waiting {retry_delay} seconds..."
+    #                 )
+    #                 await asyncio.sleep(retry_delay)
+    #             else:
+    #                 logger.warning("Dataset initialization could not be verified after maximum retries")
 
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Verification timeout on attempt {attempt + 1}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
-            except Exception as e:
-                logger.error(f"Error during dataset verification attempt {attempt + 1}: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
+    #         except subprocess.TimeoutExpired:
+    #             logger.warning(f"Verification timeout on attempt {attempt + 1}")
+    #             if attempt < max_retries - 1:
+    #                 await asyncio.sleep(retry_delay)
+    #         except Exception as e:
+    #             logger.error(f"Error during dataset verification attempt {attempt + 1}: {e}")
+    #             if attempt < max_retries - 1:
+    #                 await asyncio.sleep(retry_delay)

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-opencompass
+  namespace: budeval
+spec:
+  containers:
+  - name: debug
+    image: ghcr.io/rahulvramesh/opencompass:latest
+    command: ["sleep", "3600"]
+    imagePullPolicy: Always

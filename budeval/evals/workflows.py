@@ -71,28 +71,33 @@ class EvaluationWorkflow:
             # TODO: check the none cases, see if the opencompass handles it
             # Convert to generic evaluation request
             generic_request = GenericEvaluationRequest(
-                eval_request_id=evaluate_model_request_json.eval_request_id,
+                eval_request_id=evaluate_model_request_json.uuid,
                 engine=evaluate_model_request_json.engine,
                 model=GenericModelConfig(
                     api_version=None,
                     model_path=None,
                     tokenizer_path=None,
                     top_p=None,
-                    name=evaluate_model_request_json.model_name,
+                    name=evaluate_model_request_json.eval_model_info.model_name,
                     type=ModelType.API,
-                    api_key=evaluate_model_request_json.api_key,
-                    base_url=evaluate_model_request_json.base_url,
+                    api_key=evaluate_model_request_json.eval_model_info.api_key,
+                    base_url=evaluate_model_request_json.eval_model_info.endpoint,
                     temperature=None,
                     max_tokens=None,
                 ),
                 datasets=[
                     GenericDatasetConfig(
-                        name=dataset_name,
+                        name=dataset.dataset_id,
                         category=DatasetCategory.CUSTOM,  # Default category
                         version="1.0.0",
                         split="test",
+                        subset=None,
+                        sample_size=None,
+                        random_seed=None,
+                        custom_path=None,
+                        custom_format=None,
                     )
-                    for dataset_name in (evaluate_model_request_json.datasets or [])
+                    for dataset in (evaluate_model_request_json.eval_datasets or [])
                 ],
                 batch_size=8,
                 num_workers=1,
@@ -129,12 +134,24 @@ class EvaluationWorkflow:
                     "transformed_data": transformed.model_dump(mode="json"),
                 },
             )
+            # Manually construct response to ensure code field is included
+            return {
+                "object": "info",
+                "code": HTTPStatus.CREATED.value,
+                "message": response.message,
+                "param": response.param
+            }
         except Exception as e:
             logger.error(f"Error creating engine config: {e}", exc_info=True)
             response = ErrorResponse(
                 message="Error creating engine configuration", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
-        return response.model_dump(mode="json")
+            # Manually construct error response to ensure code field is included
+            return {
+                "object": "error", 
+                "code": HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                "message": response.message
+            }
 
     @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
@@ -157,34 +174,56 @@ class EvaluationWorkflow:
 
         deploy_request_json = json.loads(deploy_request)
 
-        # Extract the original request and transformed data
+        # Extract the original request and config metadata
         evaluate_model_request_json = StartEvaluationRequest.model_validate_json(
             deploy_request_json["evaluate_model_request"]
         )
-        transformed_data = deploy_request_json["transformed_data"]
+        config_metadata = deploy_request_json["config_metadata"]
 
         # Create deployment payload with engine from request
         payload = DeployEvalJobRequest(
             engine=evaluate_model_request_json.engine.value,
-            eval_request_id=str(evaluate_model_request_json.eval_request_id),
-            api_key=evaluate_model_request_json.api_key,
-            base_url=evaluate_model_request_json.base_url,
+            eval_request_id=str(evaluate_model_request_json.uuid),
+            api_key=evaluate_model_request_json.eval_model_info.api_key,
+            base_url=evaluate_model_request_json.eval_model_info.endpoint,
             kubeconfig=evaluate_model_request_json.kubeconfig,
-            dataset=evaluate_model_request_json.datasets or ["mmlu", "gsm8k"],
+            dataset=[dataset.dataset_id for dataset in evaluate_model_request_json.eval_datasets],
         )
 
         logger.debug(f"Deploying evaluation job for engine: {payload.engine}")
 
         response: SuccessResponse | ErrorResponse
         try:
-            # Pass transformed data to the service
+            # Reconstruct job config from metadata (without large args)
+            job_config = {
+                "job_id": config_metadata.get("job_id"),
+                "engine": config_metadata.get("engine"),
+                "image": config_metadata.get("image"),
+                "command": ["/bin/bash", "-c"],  # Standard command
+                "env_vars": config_metadata.get("env_vars", {}),
+                "config_volume": config_metadata.get("config_volume"),
+                "data_volumes": config_metadata.get("data_volumes"),
+                "output_volume": config_metadata.get("output_volume"),
+                "cpu_request": config_metadata.get("cpu_request"),
+                "cpu_limit": config_metadata.get("cpu_limit"),
+                "memory_request": config_metadata.get("memory_request"),
+                "memory_limit": config_metadata.get("memory_limit"),
+                "ttl_seconds": config_metadata.get("ttl_seconds"),
+                "backoff_limit": config_metadata.get("backoff_limit"),
+                "extra_params": {}
+            }
+
+            # Reconstruct minimal transformed_data structure
+            transformed_data = {"job_config": job_config}
+
+            # Pass reconstructed data to the service
             job_details = asyncio.run(
                 EvaluationOpsService.deploy_eval_job_with_transformation(
-                    payload, transformed_data, task_id, workflow_id
+                    payload, transformed_data, str(task_id), workflow_id
                 )
             )
 
-            response = SuccessResponse(message="Evaluation job deployed successfully", param=dict(job_details))
+            response = SuccessResponse(code=HTTPStatus.OK.value, message="Evaluation job deployed successfully", param=dict(job_details))
         except Exception as e:
             logger.error(f"Error deploying evaluation job: {e}", exc_info=True)
             response = ErrorResponse(
@@ -197,7 +236,7 @@ class EvaluationWorkflow:
     def verify_cluster_connection(
         ctx: wf.WorkflowActivityContext,
         verify_cluster_connection_request: str,
-    ) -> SuccessResponse | ErrorResponse:
+    ) -> dict:
         """Verify the cluster connection.
 
         Args:
@@ -270,7 +309,7 @@ class EvaluationWorkflow:
 
             logger.debug(f"Job status for {job_id}: {job_status}")
 
-            response = SuccessResponse(message="Job status retrieved successfully", param=job_status)
+            response = SuccessResponse(code=HTTPStatus.OK.value, message="Job status retrieved successfully", param=job_status)
         except Exception as e:
             logger.error(f"Error monitoring job progress: {e}", exc_info=True)
             response = ErrorResponse(
@@ -410,9 +449,17 @@ class EvaluationWorkflow:
             input=evaluate_model_request_json.model_dump_json(),
         )
 
-        logger.debug(f"Engine Configuration Creation Result: {create_config_result}")
+        # Log only essential info to avoid large payload serialization issues
+        logger.debug(f"Engine Configuration Creation Result: ConfigMap '{create_config_result.get('param', {}).get('configmap_name')}' in namespace '{create_config_result.get('param', {}).get('namespace')}'")
+        
+        
+        # Print the code value
+        logger.debug(f"Engine Configuration Creation Result Code: {create_config_result.get('code')}")
+        
 
-        if create_config_result.get("code", HTTPStatus.OK.value) != HTTPStatus.OK.value:
+        # Check if the result code indicates an error (not in 2xx success range)
+        result_code = create_config_result.get("code", HTTPStatus.OK.value)
+        if not (200 <= result_code < 300):
             logger.error(f"Engine Configuration Creation Failed: {create_config_result.get('message')}")
             # notify that config creation failed
             notification_req.payload.event = "create_engine_config"
@@ -435,7 +482,7 @@ class EvaluationWorkflow:
         engine_name = evaluate_model_request_json.engine.value
         notification_req.payload.content = NotificationContent(
             title="Configuration created successfully",
-            message=f"{engine_name} configuration '{configmap_name}' created for model {evaluate_model_request_json.model_name}",
+            message=f"{engine_name} configuration '{configmap_name}' created for model",
             status=WorkflowStatus.COMPLETED,
         )
         dapr_workflows.publish_notification(
@@ -445,11 +492,32 @@ class EvaluationWorkflow:
             target_name=evaluate_model_request_json.source,
         )
 
-        # Deploy Evaluation Job with transformed data
+        # Deploy Evaluation Job with essential metadata (avoid large payload)
+        config_metadata = create_config_result.get("param", {})
         deploy_request = {
             "evaluate_model_request": evaluate_model_request_json.model_dump_json(),
-            "transformed_data": create_config_result.get("param", {}).get("transformed_data", {}),
+            "config_metadata": {
+                "configmap_name": config_metadata.get("configmap_name"),
+                "namespace": config_metadata.get("namespace"),
+                "engine": config_metadata.get("engine"),
+                "job_id": config_metadata.get("transformed_data", {}).get("job_config", {}).get("job_id"),
+                "image": config_metadata.get("transformed_data", {}).get("job_config", {}).get("image"),
+                "env_vars": config_metadata.get("transformed_data", {}).get("job_config", {}).get("env_vars", {}),
+                "cpu_request": config_metadata.get("transformed_data", {}).get("job_config", {}).get("cpu_request"),
+                "cpu_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("cpu_limit"),
+                "memory_request": config_metadata.get("transformed_data", {}).get("job_config", {}).get("memory_request"),
+                "memory_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("memory_limit"),
+                "ttl_seconds": config_metadata.get("transformed_data", {}).get("job_config", {}).get("ttl_seconds"),
+                "backoff_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("backoff_limit"),
+                "output_volume": config_metadata.get("transformed_data", {}).get("job_config", {}).get("output_volume"),
+                "data_volumes": config_metadata.get("transformed_data", {}).get("job_config", {}).get("data_volumes"),
+                "config_volume": config_metadata.get("transformed_data", {}).get("job_config", {}).get("config_volume"),
+            },
         }
+        
+        # Print the deploy request
+        logger.debug(f"Deploy Request: {deploy_request}")
+        
         deploy_eval_job_result = yield ctx.call_activity(
             EvaluationWorkflow.deploy_eval_job,
             input=json.dumps(deploy_request),
@@ -676,7 +744,7 @@ class EvaluationWorkflow:
         notification_req.payload.event = "evaluation_status"
         notification_req.payload.content = NotificationContent(
             title="Model evaluation successful",
-            message=f"Model {evaluate_model_request_json.model_name} was evaluated successfully and is now available.",
+            message=f"Model {evaluate_model_request_json.eval_model_info.model_name} was evaluated successfully and is now available.",
             status=WorkflowStatus.COMPLETED,
         )
         dapr_workflows.publish_notification(

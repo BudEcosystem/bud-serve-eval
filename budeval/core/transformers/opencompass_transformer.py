@@ -40,7 +40,7 @@ class OpenCompassTransformer(BaseTransformer):
     def _load_eval_manifest(self) -> None:
         """Load evaluation manifest with dataset mappings."""
         manifest_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "eval_manifest.json"
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data", "eval_manifest.json"
         )
 
         with open(manifest_path, "r") as f:
@@ -52,13 +52,14 @@ class OpenCompassTransformer(BaseTransformer):
                 if "datasets" in provider_data:
                     for dataset in provider_data["datasets"]:
                         dataset_name = dataset.get("name", "").lower()
-                        if "evaluation_methods" in dataset:
-                            self._dataset_mappings[dataset_name] = {
-                                "gen": dataset["evaluation_methods"].get("gen"),
-                                "ppl": dataset["evaluation_methods"].get("ppl"),
-                                "id": dataset.get("id"),
-                                "description": dataset.get("description"),
-                            }
+                        # Store dataset info for OpenCompass
+                        self._dataset_mappings[dataset_name] = {
+                            "id": dataset.get("id"),
+                            "name": dataset.get("name"),
+                            "description": dataset.get("description"),
+                            "version": dataset.get("version"),
+                            "opencompass_name": dataset.get("name")  # Use the exact name for OpenCompass
+                        }
 
         logger.info(f"Loaded {len(self._dataset_mappings)} dataset mappings from manifest")
 
@@ -121,18 +122,12 @@ class OpenCompassTransformer(BaseTransformer):
         logger.info("OpenCompassTransformer.build_command called!")
         command = ["/bin/bash", "-c"]
 
-        # Get dataset names with appropriate evaluation mode suffix from manifest
+        # Get dataset names from manifest
         dataset_names = []
         for dataset in request.datasets:
-            dataset_mapping = self.get_dataset_mapping(dataset.name)
-            if dataset_mapping:
-                # Default to 'gen' mode, can be made configurable later
-                eval_mode = request.extra_params.get("eval_mode", "gen")
-                dataset_name = dataset_mapping.get(eval_mode)
-                if dataset_name:
-                    dataset_names.append(dataset_name)
-                else:
-                    logger.warning(f"No {eval_mode} mapping for dataset {dataset.name}")
+            opencompass_name = self.get_dataset_mapping(dataset.name)
+            if opencompass_name:
+                dataset_names.append(opencompass_name)
             else:
                 logger.warning(f"No mapping found for dataset {dataset.name}")
 
@@ -257,6 +252,7 @@ python /workspace/run.py \\
         """Get list of datasets supported by OpenCompass."""
         return list(self._dataset_mappings.keys())
 
-    def get_dataset_mapping(self, dataset_name: str) -> Dict[str, str]:
-        """Map generic dataset name to OpenCompass-specific names for different eval modes."""
-        return self._dataset_mappings.get(dataset_name.lower(), {})
+    def get_dataset_mapping(self, dataset_name: str) -> str:
+        """Map generic dataset name to OpenCompass-specific name."""
+        mapping = self._dataset_mappings.get(dataset_name.lower(), {})
+        return mapping.get("opencompass_name", "")

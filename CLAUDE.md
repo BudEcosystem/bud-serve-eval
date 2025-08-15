@@ -4,10 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+- Opencompass Codebase Is Available AT : `/home/ubuntu/opencompass-vr`
+
 **Code Quality:**
-- `ruff check .` - Run linting checks (with auto-fix: `ruff check --fix .`)
-- `ruff format .` - Auto-format code
+- `./.venv/bin/ruff check .` - Run linting checks (with auto-fix: `./.venv/bin/ruff check --fix .`)
+- `./.venv/bin/ruff format .` - Auto-format code
 - Note: mypy is not installed; ruff handles most linting and formatting
+- After every task, get the diagnosis form IDE to make sure no lint or related errors
 
 **Testing:**
 - `pytest` - Run test suite (requires installation from requirements-test.txt)
@@ -54,7 +57,7 @@ BudEval is a **microservice evaluation platform** that orchestrates AI model eva
 
 **API Endpoints:**
 - `POST /evals/start` - Submit evaluation jobs
-- `GET /evals/status/{job_id}` - Monitor job progress  
+- `GET /evals/status/{job_id}` - Monitor job progress
 - `DELETE /evals/cleanup/{job_id}` - Clean up resources
 - `POST /evals/init-volume` - Initialize persistent volumes
 - `POST /evals/preload-engines` - Preload engine Docker images
@@ -75,7 +78,7 @@ BudEval is a **microservice evaluation platform** that orchestrates AI model eva
 ## Configuration
 
 - `budeval/commons/config.py` - Application and secrets configuration (includes dataset URLs)
-- `budeval/commons/storage_config.py` - Environment-aware storage settings  
+- `budeval/commons/storage_config.py` - Environment-aware storage settings
 - `app.yaml` - Dapr application configuration (port 8099, components in `.dapr/`)
 - Environment variables and kubeconfig handled per-request
 - Dataset download URLs configurable via `AppConfig.opencompass_dataset_url`
@@ -93,7 +96,7 @@ BudEval is a **microservice evaluation platform** that orchestrates AI model eva
 - Handles kubeconfig-based authentication for remote clusters
 
 **Volume Initialization** (`budeval/evals/volume_init.py`):
-- Ensures shared dataset PVC exists before job execution  
+- Ensures shared dataset PVC exists before job execution
 - Downloads and extracts OpenCompass datasets on first use
 - Verifies dataset initialization with marker files
 
@@ -104,3 +107,24 @@ BudEval is a **microservice evaluation platform** that orchestrates AI model eva
 - Configuration through environment variables and Pydantic models
 - All Kubernetes operations must use Ansible for consistency
 - Engine registry pattern for pluggable evaluation backends
+
+## Working LLM Details For Eval
+```json
+curl --location 'http://20.66.97.208/v1/chat/completions' \
+--header 'Content-Type: application/json' \
+--data '{
+    "messages":
+    [{"role":"user","content":"who are you?"}],
+
+    "model":"qwen3-4b",
+
+    "stream":false,
+    "logprobs": false
+
+}'
+```
+
+## Starting App with Dapr
+```bash
+dapr run --run-file ./app.yaml
+```

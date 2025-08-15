@@ -50,7 +50,7 @@ Debug/
 # Auto generated deploy dir inside .dapr directory
 **/.dapr/deploy
 # Auto generated logs dir inside .dapr directory
-**/.dapr/logs
+# **/.dapr/logs
 # Auto generated logs dir inside microservice directory
 **/logs
 # local config files & dir
