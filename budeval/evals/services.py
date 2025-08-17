@@ -126,18 +126,37 @@ class EvaluationOpsService:
             if not job_config.get("args"):
                 logger.info("Args missing from job_config, regenerating command...")
                 try:
-                    from budeval.commons.schemas import EvaluationDataset, GenericEvaluationRequest
+
+                    # TODO: Regenerate command using transformer
+
+                    from uuid import UUID
+
+                    from budeval.core.schemas import (
+                        EvaluationEngine,
+                        GenericDatasetConfig,
+                        GenericEvaluationRequest,
+                        GenericModelConfig,
+                        ModelType,
+                    )
                     from budeval.core.transformers.opencompass_transformer import OpenCompassTransformer
 
                     # Create a generic request from the original request
-                    datasets = [EvaluationDataset(name=d["dataset_id"], description="")
-                              for d in evaluate_model_request.dataset if isinstance(d, dict)]
+                    datasets = [GenericDatasetConfig(name=d, category="custom")
+                              for d in evaluate_model_request.dataset if isinstance(d, str)]
 
-                    generic_request = GenericEvaluationRequest(
-                        model_name=evaluate_model_request.eval_request_id,  # Use ID as placeholder
-                        datasets=datasets,
+                    # Create model config
+                    model_config = GenericModelConfig(
+                        name=evaluate_model_request.eval_request_id,
+                        type=ModelType.API,
                         api_key=evaluate_model_request.api_key,
                         base_url=evaluate_model_request.base_url
+                    )
+
+                    generic_request = GenericEvaluationRequest(
+                        eval_request_id=UUID(evaluate_model_request.eval_request_id),
+                        engine=EvaluationEngine.OPENCOMPASS,
+                        model=model_config,
+                        datasets=datasets
                     )
 
                     # Regenerate command using transformer

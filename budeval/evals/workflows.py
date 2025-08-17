@@ -148,7 +148,7 @@ class EvaluationWorkflow:
             )
             # Manually construct error response to ensure code field is included
             return {
-                "object": "error", 
+                "object": "error",
                 "code": HTTPStatus.INTERNAL_SERVER_ERROR.value,
                 "message": response.message
             }
@@ -451,11 +451,11 @@ class EvaluationWorkflow:
 
         # Log only essential info to avoid large payload serialization issues
         logger.debug(f"Engine Configuration Creation Result: ConfigMap '{create_config_result.get('param', {}).get('configmap_name')}' in namespace '{create_config_result.get('param', {}).get('namespace')}'")
-        
-        
+
+
         # Print the code value
         logger.debug(f"Engine Configuration Creation Result Code: {create_config_result.get('code')}")
-        
+
 
         # Check if the result code indicates an error (not in 2xx success range)
         result_code = create_config_result.get("code", HTTPStatus.OK.value)
@@ -514,10 +514,10 @@ class EvaluationWorkflow:
                 "config_volume": config_metadata.get("transformed_data", {}).get("job_config", {}).get("config_volume"),
             },
         }
-        
+
         # Print the deploy request
         logger.debug(f"Deploy Request: {deploy_request}")
-        
+
         deploy_eval_job_result = yield ctx.call_activity(
             EvaluationWorkflow.deploy_eval_job,
             input=json.dumps(deploy_request),

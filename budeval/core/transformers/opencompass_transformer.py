@@ -131,13 +131,16 @@ class OpenCompassTransformer(BaseTransformer):
             else:
                 logger.warning(f"No mapping found for dataset {dataset.name}")
 
-        datasets_str = " ".join(dataset_names)
 
         # Create a model-only config file
+        debug_flag = ""
+        if request.debug:
+            debug_flag = " \\\n    --debug"
+
         script = f"""
 # Create a model config file that uses environment variables
-mkdir -p /workspace/outputs/configs
-cat > /workspace/outputs/configs/bud_model.py << 'EOF'
+mkdir -p /workspace/opencompass/configs/models
+cat > /workspace/opencompass/configs/models/bud_model.py << 'EOF'
 from opencompass.models import OpenAISDK
 import os
 
@@ -161,11 +164,10 @@ cd /workspace
 
 # Run OpenCompass evaluation with model config and datasets via CLI
 python /workspace/run.py \\
-    --models /workspace/outputs/configs/bud_model.py \\
-    --datasets {datasets_str} \\
+    --models bud_model \\
+    --datasets demo_gsm8k_chat_gen \\
     --work-dir /workspace/outputs \\
-    --max-num-workers {request.num_workers} \\
-    {"--debug" if request.debug else ""}
+    --max-num-workers {request.num_workers}{debug_flag}
 """
 
         args = [script.strip()]

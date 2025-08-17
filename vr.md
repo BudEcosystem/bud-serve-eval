@@ -21,3 +21,17 @@ ultrathink , this is high priority as it is core of the application
 
 
 dapr run --run-file ./app.yaml
+
+/usr/local/lib/python3.10/site-packages/transformers/utils/hub.py:111: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.                                     │
+│   warnings.warn(                                                                                                                                                                                                                     │
+│ 08/17 09:49:14 - OpenCompass - INFO - Loading demo_gsm8k_chat_gen: /workspace/opencompass/configs/./datasets/demo/demo_gsm8k_chat_gen.py                                                                                             │
+│ 08/17 09:49:14 - OpenCompass - INFO - Loading bud_model: /workspace/opencompass/configs/./models/bud_model.py                                                                                                                        │
+│ 08/17 09:49:14 - OpenCompass - INFO - Loading example: /workspace/opencompass/configs/./summarizers/example.py                                                                                                                       │
+│ 08/17 09:49:14 - OpenCompass - INFO - Current exp folder: /workspace/outputs/20250817_094914                                                                                                                                         │
+│ 08/17 09:49:14 - OpenCompass - WARNING - SlurmRunner is not used, so the partition argument is ignored.                                                                                                                              │
+│ 08/17 09:49:14 - OpenCompass - INFO - ./data/gsm8k/ does not exist!Start Download data automatically!If you have downloaded the data before,You can specific `COMPASS_DATA_CACHE` to avoid downloading~                              │
+│ Downloading http://opencompass.oss-cn-shanghai.aliyuncs.com/datasets/data/gsm8k.zip to /root/.cache/opencompass/data/gsm8k.zip                                                                                                       │
+│ 3.4/3.4 MB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:00                                                                                                                                                     │
+│ Extracting /root/.cache/opencompass/data/gsm8k.zip to /root/.cache/opencompass/data                                                                                                                                                  │
+│ Map:   0%|          | 0/7473 [00:00<?, ? examples/s]Map:   5%|▍         | 337/7473 [00:00<00:02, 2675.50 examples/s]Map:  10%|▉         | 723/7473 [00:00<00:02, 3133.66 examples/s]Map:  15%|█▍        | 1088/7473 [00:00<00:01, 32 │
+│ Map:   0%|          | 0/1319 [00:00<?, ? examples/s]Map:  21%|██        | 272/1319 [00:00<00:00, 2601.76 examples/s]Map:  44%|████▎     | 576/
