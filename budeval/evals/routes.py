@@ -245,7 +245,7 @@ async def get_evaluation_results(job_id: str):
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
@@ -274,7 +274,7 @@ async def get_evaluation_summary(job_id: str):
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
@@ -306,7 +306,7 @@ async def get_dataset_results(job_id: str, dataset_name: str):
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
@@ -341,7 +341,7 @@ async def get_evaluation_metrics(job_id: str):
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
@@ -378,7 +378,7 @@ async def list_evaluation_results():
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
         job_ids = await storage.list_results()
 
@@ -386,29 +386,21 @@ async def list_evaluation_results():
         results_list = []
         for job_id in job_ids:
             # Try to get metadata if supported by storage adapter
-            if hasattr(storage, 'get_metadata'):
+            if hasattr(storage, "get_metadata"):
                 metadata = await storage.get_metadata(job_id)
                 if metadata:
-                    results_list.append({
-                        "job_id": job_id,
-                        "stored_at": metadata.get("stored_at"),
-                        "storage_type": metadata.get("storage_type")
-                    })
+                    results_list.append(
+                        {
+                            "job_id": job_id,
+                            "stored_at": metadata.get("stored_at"),
+                            "storage_type": metadata.get("storage_type"),
+                        }
+                    )
             else:
                 # For storage adapters without metadata, use basic info
-                results_list.append({
-                    "job_id": job_id,
-                    "stored_at": None,
-                    "storage_type": storage.__class__.__name__
-                })
+                results_list.append({"job_id": job_id, "stored_at": None, "storage_type": storage.__class__.__name__})
 
-        return {
-            "status": "success",
-            "data": {
-                "total_results": len(job_ids),
-                "results": results_list
-            }
-        }
+        return {"status": "success", "data": {"total_results": len(job_ids), "results": results_list}}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list results: {str(e)}") from e
@@ -428,7 +420,7 @@ async def delete_evaluation_results(job_id: str):
         from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
         storage = get_storage_adapter()
-        if hasattr(storage, 'initialize'):
+        if hasattr(storage, "initialize"):
             await initialize_storage(storage)
 
         # Check if results exist
@@ -439,10 +431,7 @@ async def delete_evaluation_results(job_id: str):
         success = await storage.delete_results(job_id)
 
         if success:
-            return {
-                "status": "success",
-                "message": f"Results deleted successfully for job: {job_id}"
-            }
+            return {"status": "success", "message": f"Results deleted successfully for job: {job_id}"}
         else:
             raise HTTPException(status_code=500, detail=f"Failed to delete results for job: {job_id}")
 

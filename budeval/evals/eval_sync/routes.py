@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from budmicroframe.commons import logging
 from fastapi import APIRouter, HTTPException, Query
@@ -34,8 +34,8 @@ router = APIRouter(prefix="/eval-datasets", tags=["eval-datasets"])
 
 @router.get("/datasets", response_model=list[Dataset])
 async def list_datasets(
-    traits: list[str] | None = Query(None, description="Filter by traits"),
-    source: str | None = Query(None, description="Filter by source"),
+    traits: Annotated[list[str] | None, Query(description="Filter by traits")] = None,
+    source: Annotated[str | None, Query(description="Filter by source")] = None,
 ) -> list[Dataset]:
     """List all available evaluation datasets."""
     try:
@@ -43,7 +43,7 @@ async def list_datasets(
         return await repo.list_datasets(traits=traits, source=source)
     except Exception as e:
         logger.error(f"Failed to list datasets: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve datasets")
+        raise HTTPException(status_code=500, detail="Failed to retrieve datasets") from e
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -59,7 +59,7 @@ async def get_dataset(dataset_id: str) -> Dataset:
         raise
     except Exception as e:
         logger.error(f"Failed to get dataset {dataset_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve dataset")
+        raise HTTPException(status_code=500, detail="Failed to retrieve dataset") from e
 
 
 @router.get("/datasets/search", response_model=list[Dataset])
@@ -70,7 +70,7 @@ async def search_datasets(q: str = Query(..., description="Search query")) -> li
         return await repo.search_datasets(q)
     except Exception as e:
         logger.error(f"Failed to search datasets: {e}")
-        raise HTTPException(status_code=500, detail="Failed to search datasets")
+        raise HTTPException(status_code=500, detail="Failed to search datasets") from e
 
 
 @router.get("/traits", response_model=list[TraitDefinition])
@@ -81,7 +81,7 @@ async def list_traits() -> list[TraitDefinition]:
         return await repo.list_traits()
     except Exception as e:
         logger.error(f"Failed to list traits: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve traits")
+        raise HTTPException(status_code=500, detail="Failed to retrieve traits") from e
 
 
 @router.get("/traits/{trait_name}", response_model=TraitDefinition)
@@ -97,7 +97,7 @@ async def get_trait(trait_name: str) -> TraitDefinition:
         raise
     except Exception as e:
         logger.error(f"Failed to get trait {trait_name}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve trait")
+        raise HTTPException(status_code=500, detail="Failed to retrieve trait") from e
 
 
 @router.get("/traits/{trait_name}/datasets", response_model=list[Dataset])
@@ -108,7 +108,7 @@ async def get_datasets_by_trait(trait_name: str) -> list[Dataset]:
         return await repo.get_datasets_by_trait(trait_name)
     except Exception as e:
         logger.error(f"Failed to get datasets for trait {trait_name}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve datasets")
+        raise HTTPException(status_code=500, detail="Failed to retrieve datasets") from e
 
 
 @router.get("/sources", response_model=list[str])
@@ -119,7 +119,7 @@ async def get_dataset_sources() -> list[str]:
         return await repo.get_dataset_sources()
     except Exception as e:
         logger.error(f"Failed to get dataset sources: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve sources")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sources") from e
 
 
 @router.get("/sources/{source}/datasets", response_model=list[Dataset])
@@ -130,7 +130,7 @@ async def get_datasets_by_source(source: str) -> list[Dataset]:
         return await repo.get_datasets_by_source(source)
     except Exception as e:
         logger.error(f"Failed to get datasets for source {source}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve datasets")
+        raise HTTPException(status_code=500, detail="Failed to retrieve datasets") from e
 
 
 @router.post("/sync")
@@ -174,7 +174,7 @@ async def sync_datasets(force: bool = Query(False, description="Force sync even 
         }
     except Exception as e:
         logger.error(f"Failed to sync datasets: {e}")
-        raise HTTPException(status_code=500, detail="Failed to sync datasets")
+        raise HTTPException(status_code=500, detail="Failed to sync datasets") from e
 
 
 @router.get("/sync/status")
@@ -218,7 +218,7 @@ async def get_sync_status() -> dict[str, Any]:
             }
     except Exception as e:
         logger.error(f"Failed to get sync status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve sync status")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sync status") from e
 
 
 @router.post("/sync/local")
@@ -271,4 +271,4 @@ async def sync_local_manifest() -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Failed to sync local manifest: {e}")
-        raise HTTPException(status_code=500, detail="Failed to sync local manifest")
+        raise HTTPException(status_code=500, detail="Failed to sync local manifest") from e

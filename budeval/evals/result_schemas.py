@@ -75,9 +75,9 @@ class ProcessedEvaluationResults(BaseModel):
     job_duration_seconds: Optional[float] = Field(None, description="Job execution duration")
 
     class Config:
-        json_encoders = {
-            datetime: lambda dt: dt.isoformat()
-        }
+        """Pydantic configuration for JSON encoding."""
+
+        json_encoders = {datetime: lambda dt: dt.isoformat()}
 
 
 class ResultsProcessingError(BaseModel):
@@ -90,6 +90,6 @@ class ResultsProcessingError(BaseModel):
     extraction_path: Optional[str] = Field(None, description="Path where extraction was attempted")
 
     class Config:
-        json_encoders = {
-            datetime: lambda dt: dt.isoformat()
-        }
+        """Pydantic configuration for JSON encoding."""
+
+        json_encoders = {datetime: lambda dt: dt.isoformat()}

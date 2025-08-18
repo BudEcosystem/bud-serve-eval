@@ -149,9 +149,9 @@ class EvalDataSyncService:
             if original_data.get("creator_info"):
                 creator_info = original_data["creator_info"]
                 # Convert CreatorInfo Pydantic model to dict for JSON serialization
-                if hasattr(creator_info, 'model_dump'):
+                if hasattr(creator_info, "model_dump"):
                     dataset_fields["meta_links"]["creator"] = creator_info.model_dump()
-                elif hasattr(creator_info, '__dict__'):
+                elif hasattr(creator_info, "__dict__"):
                     dataset_fields["meta_links"]["creator"] = creator_info.__dict__
                 else:
                     dataset_fields["meta_links"]["creator"] = creator_info

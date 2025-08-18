@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 async def execute_initial_eval_sync() -> None:
     """Execute initial evaluation data sync on startup.
-    
+
     This function runs the evaluation data sync once when the application starts,
     similar to how budapp handles it.
     """
@@ -59,7 +59,9 @@ async def execute_initial_eval_sync() -> None:
         with sync_service.db.get_session() as db:
             current_version = sync_service.get_current_version(db)
 
-        logger.info(f"Initial sync check - Current version: {current_version}, Latest version: {manifest.version_info.current_version}")
+        logger.info(
+            f"Initial sync check - Current version: {current_version}, Latest version: {manifest.version_info.current_version}"
+        )
 
         # Only sync if versions differ (not forcing on startup)
         if current_version != manifest.version_info.current_version:
@@ -77,8 +79,8 @@ async def execute_initial_eval_sync() -> None:
                         "failed_datasets": sync_results["failed_datasets"],
                         "total_datasets": sync_results.get("total_datasets", 0),
                         "source": "cloud" if not app_settings.eval_sync_local_mode else "local",
-                        "trigger": "startup"
-                    }
+                        "trigger": "startup",
+                    },
                 )
             logger.info(f"Initial sync completed: {len(sync_results['synced_datasets'])} datasets synced")
         else:
@@ -90,7 +92,7 @@ async def execute_initial_eval_sync() -> None:
 
 async def schedule_eval_data_sync() -> None:
     """Schedule hourly evaluation data synchronization from cloud repository.
-    
+
     This function runs evaluation data sync periodically based on the configured interval,
     similar to budapp's hourly sync.
     """
@@ -117,7 +119,9 @@ async def schedule_eval_data_sync() -> None:
 
             # Check if sync is needed
             if current_version != manifest.version_info.current_version:
-                logger.info(f"Scheduled sync - version update detected: {current_version} -> {manifest.version_info.current_version}")
+                logger.info(
+                    f"Scheduled sync - version update detected: {current_version} -> {manifest.version_info.current_version}"
+                )
                 sync_results = await sync_service.sync_datasets(manifest, current_version, force_sync=False)
 
                 # Record sync results
@@ -131,8 +135,8 @@ async def schedule_eval_data_sync() -> None:
                             "failed_datasets": sync_results["failed_datasets"],
                             "total_datasets": sync_results.get("total_datasets", 0),
                             "source": "cloud" if not app_settings.eval_sync_local_mode else "local",
-                            "trigger": "scheduled"
-                        }
+                            "trigger": "scheduled",
+                        },
                     )
                 logger.info(f"Scheduled sync completed: {len(sync_results['synced_datasets'])} datasets synced")
             else:
@@ -210,7 +214,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             eval_sync_task.cancel()
 
         # Wait for tasks to complete cancellation
-        await asyncio.gather(task, eval_sync_task, return_exceptions=True) if eval_sync_task else await asyncio.gather(task, return_exceptions=True)
+        await asyncio.gather(task, eval_sync_task, return_exceptions=True) if eval_sync_task else await asyncio.gather(
+            task, return_exceptions=True
+        )
 
     except asyncio.CancelledError:
         logger.exception("Failed to cleanup config & store sync.")

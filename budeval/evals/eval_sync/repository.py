@@ -71,6 +71,7 @@ class DatabaseManifestRepository(EvalDatasetRepository):
     """Database implementation of the repository using persisted dataset metadata."""
 
     def __init__(self) -> None:
+        """Initialize the database repository and connect to the database."""
         from budmicroframe.shared.psql_service import Database
 
         self.db = Database()

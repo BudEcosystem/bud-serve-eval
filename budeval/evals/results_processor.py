@@ -18,7 +18,7 @@ from .result_schemas import (
     ResultsProcessingError,
 )
 from .storage.base import StorageAdapter
-from .storage.factory import get_storage_adapter, initialize_storage
+from .storage.factory import get_storage_adapter
 
 
 logger = logging.getLogger(__name__)
@@ -27,9 +27,11 @@ logger = logging.getLogger(__name__)
 class ResultsProcessor:
     """Process evaluation results from PVC and store using storage adapter."""
 
-    def __init__(self, storage_adapter: Optional[StorageAdapter] = None, extraction_base_path: str = "/tmp/eval_extractions"):
+    def __init__(
+        self, storage_adapter: Optional[StorageAdapter] = None, extraction_base_path: str = "/tmp/eval_extractions"
+    ):
         """Initialize results processor.
-        
+
         Args:
             storage_adapter: Storage adapter to use for saving results. If None, uses factory.
             extraction_base_path: Base path for extracting files locally
@@ -38,24 +40,21 @@ class ResultsProcessor:
         self.extraction_base_path = Path(extraction_base_path)
         self.extraction_base_path.mkdir(parents=True, exist_ok=True)
         self.orchestrator = AnsibleOrchestrator()
-        logger.info(f"Initialized results processor with {self.storage.__class__.__name__} storage and extraction path: {self.extraction_base_path}")
+        logger.info(
+            f"Initialized results processor with {self.storage.__class__.__name__} storage and extraction path: {self.extraction_base_path}"
+        )
 
-    def extract_from_pvc(
-        self,
-        job_id: str,
-        namespace: str = "budeval",
-        kubeconfig: Optional[str] = None
-    ) -> str:
+    def extract_from_pvc(self, job_id: str, namespace: str = "budeval", kubeconfig: Optional[str] = None) -> str:
         """Extract results from PVC using Ansible playbook.
-        
+
         Args:
             job_id: Job ID to extract results for
             namespace: Kubernetes namespace
             kubeconfig: Optional kubeconfig content
-            
+
         Returns:
             Local path where results were extracted
-            
+
         Raises:
             Exception: If extraction fails
         """
@@ -73,28 +72,26 @@ class ResultsProcessor:
         if kubeconfig:
             # Write kubeconfig to temporary file
             kubeconfig_path = self.extraction_base_path / f"{job_id}_kubeconfig.yaml"
-            with open(kubeconfig_path, 'w') as f:
+            with open(kubeconfig_path, "w") as f:
                 f.write(kubeconfig)
             ansible_vars["kubeconfig_path"] = str(kubeconfig_path)
 
         try:
             # Run extraction playbook - use the synchronous method and handle it
             import uuid
+
             temp_id = str(uuid.uuid4())
-            
+
             result = self.orchestrator._run_ansible_playbook_with_output(
-                playbook="extract_results_from_pvc.yml",
-                uuid=temp_id,
-                files={},
-                extravars=ansible_vars
+                playbook="extract_results_from_pvc.yml", uuid=temp_id, files={}, extravars=ansible_vars
             )
-            
+
             # Check if playbook succeeded - ansible_runner result has .rc attribute
             if not result or result.rc != 0:
                 error_msg = f"Ansible playbook failed with return code: {result.rc}"
-                if hasattr(result, 'stdout') and result.stdout:
+                if hasattr(result, "stdout") and result.stdout:
                     error_msg += f", stdout: {result.stdout.read()}"
-                if hasattr(result, 'stderr') and result.stderr:
+                if hasattr(result, "stderr") and result.stderr:
                     error_msg += f", stderr: {result.stderr.read()}"
                 raise Exception(error_msg)
 
@@ -119,10 +116,10 @@ class ResultsProcessor:
 
     def _find_timestamp_directory(self, extracted_path: str) -> Optional[str]:
         """Find the timestamp directory in extracted results.
-        
+
         Args:
             extracted_path: Path where results were extracted
-            
+
         Returns:
             Name of the timestamp directory or None if not found
         """
@@ -133,7 +130,7 @@ class ResultsProcessor:
 
             # Look for directories that match timestamp pattern (YYYYMMDD_HHMMSS)
             for item in extracted_dir.iterdir():
-                if item.is_dir() and len(item.name) == 15 and '_' in item.name:
+                if item.is_dir() and len(item.name) == 15 and "_" in item.name:
                     return item.name
 
             return None
@@ -144,10 +141,10 @@ class ResultsProcessor:
 
     def _parse_opencompass_structure(self, results_path: Path) -> OpenCompassOutputStructure:
         """Parse OpenCompass output directory structure.
-        
+
         Args:
             results_path: Path to the timestamp directory
-            
+
         Returns:
             OpenCompassOutputStructure with file locations
         """
@@ -165,7 +162,7 @@ class ResultsProcessor:
                 for model_dir in predictions_dir.iterdir():
                     if model_dir.is_dir():
                         for dataset_file in model_dir.iterdir():
-                            if dataset_file.is_file() and dataset_file.suffix == '.json':
+                            if dataset_file.is_file() and dataset_file.suffix == ".json":
                                 dataset_name = dataset_file.stem
                                 structure.prediction_files[dataset_name] = str(dataset_file)
 
@@ -175,7 +172,7 @@ class ResultsProcessor:
                 for model_dir in results_dir.iterdir():
                     if model_dir.is_dir():
                         for dataset_file in model_dir.iterdir():
-                            if dataset_file.is_file() and dataset_file.suffix == '.json':
+                            if dataset_file.is_file() and dataset_file.suffix == ".json":
                                 dataset_name = dataset_file.stem
                                 structure.result_files[dataset_name] = str(dataset_file)
 
@@ -184,11 +181,11 @@ class ResultsProcessor:
             if summary_dir.exists():
                 for summary_file in summary_dir.iterdir():
                     if summary_file.is_file():
-                        if summary_file.suffix == '.csv':
+                        if summary_file.suffix == ".csv":
                             structure.summary_files["csv"] = str(summary_file)
-                        elif summary_file.suffix == '.md':
+                        elif summary_file.suffix == ".md":
                             structure.summary_files["markdown"] = str(summary_file)
-                        elif summary_file.suffix == '.txt':
+                        elif summary_file.suffix == ".txt":
                             structure.summary_files["text"] = str(summary_file)
 
             # Parse logs
@@ -212,15 +209,15 @@ class ResultsProcessor:
 
     def _parse_predictions(self, prediction_file_path: str) -> List[PredictionItem]:
         """Parse predictions from JSON file.
-        
+
         Args:
             prediction_file_path: Path to predictions JSON file
-            
+
         Returns:
             List of PredictionItem objects
         """
         try:
-            with open(prediction_file_path, 'r') as f:
+            with open(prediction_file_path, "r") as f:
                 predictions_data = json.load(f)
 
             predictions = []
@@ -232,7 +229,7 @@ class ResultsProcessor:
                         answer=item.get("answer", []),
                         correct=item.get("correct", []),
                         origin_prompt=item.get("origin_prompt"),
-                        prediction=item.get("prediction")
+                        prediction=item.get("prediction"),
                     )
                     predictions.append(prediction)
 
@@ -245,15 +242,15 @@ class ResultsProcessor:
 
     def _parse_results(self, result_file_path: str) -> Dict:
         """Parse results from JSON file.
-        
+
         Args:
             result_file_path: Path to results JSON file
-            
+
         Returns:
             Dictionary with accuracy and details
         """
         try:
-            with open(result_file_path, 'r') as f:
+            with open(result_file_path, "r") as f:
                 results_data = json.load(f)
 
             logger.debug(f"Parsed results from {result_file_path}")
@@ -264,18 +261,15 @@ class ResultsProcessor:
             return {}
 
     async def process_opencompass_results(
-        self,
-        extracted_path: str,
-        job_id: str,
-        model_name: str
+        self, extracted_path: str, job_id: str, model_name: str
     ) -> ProcessedEvaluationResults:
         """Process OpenCompass results from extracted path.
-        
+
         Args:
             extracted_path: Path where results were extracted
             job_id: Job ID
             model_name: Model name
-            
+
         Returns:
             ProcessedEvaluationResults object
         """
@@ -324,7 +318,7 @@ class ResultsProcessor:
                     metadata={
                         "result_file": result_file_path,
                         "prediction_file": structure.prediction_files.get(dataset_name),
-                    }
+                    },
                 )
 
                 datasets.append(dataset_result)
@@ -347,7 +341,7 @@ class ResultsProcessor:
             total_examples=total_examples,
             total_correct=total_correct,
             dataset_accuracies=dataset_accuracies,
-            model_name=model_name
+            model_name=model_name,
         )
 
         # Create final results
@@ -360,27 +354,25 @@ class ResultsProcessor:
             raw_output=structure,
             extracted_at=datetime.utcnow(),
             extraction_path=extracted_path,
-            output_pvc_name=f"{job_id}-output-pvc"
+            output_pvc_name=f"{job_id}-output-pvc",
         )
 
-        logger.info(f"Successfully processed results for job {job_id}: {len(datasets)} datasets, {overall_accuracy:.2f}% overall accuracy")
+        logger.info(
+            f"Successfully processed results for job {job_id}: {len(datasets)} datasets, {overall_accuracy:.2f}% overall accuracy"
+        )
         return processed_results
 
     async def extract_and_process(
-        self,
-        job_id: str,
-        model_name: str,
-        namespace: str = "budeval",
-        kubeconfig: Optional[str] = None
+        self, job_id: str, model_name: str, namespace: str = "budeval", kubeconfig: Optional[str] = None
     ) -> ProcessedEvaluationResults:
         """Extract results from PVC and process them.
-        
+
         Args:
             job_id: Job ID to extract results for
             model_name: Model name
             namespace: Kubernetes namespace
             kubeconfig: Optional kubeconfig content
-            
+
         Returns:
             ProcessedEvaluationResults object
         """
@@ -406,7 +398,7 @@ class ResultsProcessor:
                 error_type=type(e).__name__,
                 error_message=str(e),
                 occurred_at=datetime.utcnow(),
-                extraction_path=str(self.extraction_base_path / job_id)
+                extraction_path=str(self.extraction_base_path / job_id),
             )
 
             await self.storage.save_results(f"{job_id}_error", error.model_dump())

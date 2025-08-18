@@ -58,7 +58,7 @@ class OpenCompassTransformer(BaseTransformer):
                             "name": dataset.get("name"),
                             "description": dataset.get("description"),
                             "version": dataset.get("version"),
-                            "opencompass_name": dataset.get("name")  # Use the exact name for OpenCompass
+                            "opencompass_name": dataset.get("name"),  # Use the exact name for OpenCompass
                         }
 
         logger.info(f"Loaded {len(self._dataset_mappings)} dataset mappings from manifest")
@@ -130,7 +130,6 @@ class OpenCompassTransformer(BaseTransformer):
                 dataset_names.append(opencompass_name)
             else:
                 logger.warning(f"No mapping found for dataset {dataset.name}")
-
 
         # Create a model-only config file
         debug_flag = ""

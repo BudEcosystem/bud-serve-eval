@@ -16,6 +16,7 @@ class VolumeInitializer:
     _initialized = False
 
     def __init__(self):
+        """Initialize the volume initializer with an Ansible orchestrator."""
         self.orchestrator = AnsibleOrchestrator()
 
     @classmethod

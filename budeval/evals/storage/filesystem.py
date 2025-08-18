@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 
 class FilesystemStorage(StorageAdapter):
     """Filesystem-based storage adapter for evaluation results.
-    
+
     Stores results as JSON files in a local directory structure.
     Used primarily for testing and development.
     """
 
     def __init__(self, base_path: str = "/tmp/eval_results"):
         """Initialize filesystem storage.
-        
+
         Args:
             base_path: Base directory path to store results
         """
@@ -32,10 +32,10 @@ class FilesystemStorage(StorageAdapter):
 
     def _get_job_path(self, job_id: str) -> Path:
         """Get the directory path for a job's results.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             Path object for the job's directory
         """
@@ -43,10 +43,10 @@ class FilesystemStorage(StorageAdapter):
 
     def _get_results_file(self, job_id: str) -> Path:
         """Get the path to the results JSON file.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             Path object for the results file
         """
@@ -54,10 +54,10 @@ class FilesystemStorage(StorageAdapter):
 
     def _get_metadata_file(self, job_id: str) -> Path:
         """Get the path to the metadata JSON file.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             Path object for the metadata file
         """
@@ -65,11 +65,11 @@ class FilesystemStorage(StorageAdapter):
 
     async def save_results(self, job_id: str, results: Dict) -> bool:
         """Save evaluation results to filesystem.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
             results: Processed evaluation results dictionary
-            
+
         Returns:
             True if saved successfully, False otherwise
         """
@@ -79,7 +79,7 @@ class FilesystemStorage(StorageAdapter):
 
             # Save results
             results_file = self._get_results_file(job_id)
-            with open(results_file, 'w') as f:
+            with open(results_file, "w") as f:
                 json.dump(results, f, indent=2, default=str)
 
             # Save metadata
@@ -87,10 +87,10 @@ class FilesystemStorage(StorageAdapter):
                 "job_id": job_id,
                 "stored_at": datetime.utcnow().isoformat(),
                 "storage_type": "filesystem",
-                "storage_path": str(results_file)
+                "storage_path": str(results_file),
             }
             metadata_file = self._get_metadata_file(job_id)
-            with open(metadata_file, 'w') as f:
+            with open(metadata_file, "w") as f:
                 json.dump(metadata, f, indent=2)
 
             logger.info(f"Saved results for job {job_id} to {results_file}")
@@ -102,10 +102,10 @@ class FilesystemStorage(StorageAdapter):
 
     async def get_results(self, job_id: str) -> Optional[Dict]:
         """Retrieve evaluation results from filesystem.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             Dictionary containing evaluation results or None if not found
         """
@@ -116,7 +116,7 @@ class FilesystemStorage(StorageAdapter):
                 logger.warning(f"Results file not found for job {job_id}: {results_file}")
                 return None
 
-            with open(results_file, 'r') as f:
+            with open(results_file, "r") as f:
                 results = json.load(f)
 
             logger.debug(f"Retrieved results for job {job_id}")
@@ -128,10 +128,10 @@ class FilesystemStorage(StorageAdapter):
 
     async def delete_results(self, job_id: str) -> bool:
         """Delete evaluation results from filesystem.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             True if deleted successfully, False otherwise
         """
@@ -159,7 +159,7 @@ class FilesystemStorage(StorageAdapter):
 
     async def list_results(self) -> List[str]:
         """List all available job IDs with results.
-        
+
         Returns:
             List of job IDs that have stored results
         """
@@ -184,10 +184,10 @@ class FilesystemStorage(StorageAdapter):
 
     async def exists(self, job_id: str) -> bool:
         """Check if results exist for a job.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             True if results exist, False otherwise
         """
@@ -196,10 +196,10 @@ class FilesystemStorage(StorageAdapter):
 
     async def get_metadata(self, job_id: str) -> Optional[Dict]:
         """Get metadata for a job's results.
-        
+
         Args:
             job_id: Unique identifier for the evaluation job
-            
+
         Returns:
             Dictionary containing metadata or None if not found
         """
@@ -209,7 +209,7 @@ class FilesystemStorage(StorageAdapter):
             if not metadata_file.exists():
                 return None
 
-            with open(metadata_file, 'r') as f:
+            with open(metadata_file, "r") as f:
                 metadata = json.load(f)
 
             return metadata

@@ -17,7 +17,7 @@ from budmicroframe.commons.schemas import (
 from budmicroframe.shared.dapr_workflow import DaprWorkflow
 
 from budeval.commons.logging import logging
-from budeval.commons.utils import check_workflow_status_in_statestore, update_workflow_data_in_statestore
+from budeval.commons.utils import update_workflow_data_in_statestore
 from budeval.core.schemas import (
     DatasetCategory,
     GenericDatasetConfig,
@@ -139,7 +139,7 @@ class EvaluationWorkflow:
                 "object": "info",
                 "code": HTTPStatus.CREATED.value,
                 "message": response.message,
-                "param": response.param
+                "param": response.param,
             }
         except Exception as e:
             logger.error(f"Error creating engine config: {e}", exc_info=True)
@@ -147,11 +147,7 @@ class EvaluationWorkflow:
                 message="Error creating engine configuration", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
             # Manually construct error response to ensure code field is included
-            return {
-                "object": "error",
-                "code": HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                "message": response.message
-            }
+            return {"object": "error", "code": HTTPStatus.INTERNAL_SERVER_ERROR.value, "message": response.message}
 
     @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
@@ -210,7 +206,7 @@ class EvaluationWorkflow:
                 "memory_limit": config_metadata.get("memory_limit"),
                 "ttl_seconds": config_metadata.get("ttl_seconds"),
                 "backoff_limit": config_metadata.get("backoff_limit"),
-                "extra_params": {}
+                "extra_params": {},
             }
 
             # Reconstruct minimal transformed_data structure
@@ -223,7 +219,9 @@ class EvaluationWorkflow:
                 )
             )
 
-            response = SuccessResponse(code=HTTPStatus.OK.value, message="Evaluation job deployed successfully", param=dict(job_details))
+            response = SuccessResponse(
+                code=HTTPStatus.OK.value, message="Evaluation job deployed successfully", param=dict(job_details)
+            )
         except Exception as e:
             logger.error(f"Error deploying evaluation job: {e}", exc_info=True)
             response = ErrorResponse(
@@ -311,19 +309,19 @@ class EvaluationWorkflow:
             # Initialize processor with configured storage backend
             storage = get_storage_adapter()
             processor = ResultsProcessor(storage)
-            
+
             # Initialize storage if needed (e.g., ClickHouse connection pool)
-            if hasattr(storage, 'initialize'):
+            if hasattr(storage, "initialize"):
                 asyncio.run(initialize_storage(storage))
 
             # Extract and process results
             import asyncio
-            results = asyncio.run(processor.extract_and_process(
-                job_id=job_id,
-                model_name=model_name,
-                namespace=namespace,
-                kubeconfig=kubeconfig
-            ))
+
+            results = asyncio.run(
+                processor.extract_and_process(
+                    job_id=job_id, model_name=model_name, namespace=namespace, kubeconfig=kubeconfig
+                )
+            )
 
             logger.info(f"Successfully processed results for job {job_id}")
             response = SuccessResponse(
@@ -333,14 +331,13 @@ class EvaluationWorkflow:
                     "job_id": job_id,
                     "datasets_processed": len(results.datasets),
                     "overall_accuracy": results.summary.overall_accuracy,
-                    "storage_path": results.extraction_path
-                }
+                    "storage_path": results.extraction_path,
+                },
             )
         except Exception as e:
             logger.error(f"Error extracting results: {e}", exc_info=True)
             response = ErrorResponse(
-                message=f"Error extracting results: {str(e)}",
-                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+                message=f"Error extracting results: {str(e)}", code=HTTPStatus.INTERNAL_SERVER_ERROR.value
             )
         return response.model_dump(mode="json")
 
@@ -372,7 +369,9 @@ class EvaluationWorkflow:
 
             logger.debug(f"Job status for {job_id}: {job_status}")
 
-            response = SuccessResponse(code=HTTPStatus.OK.value, message="Job status retrieved successfully", param=job_status)
+            response = SuccessResponse(
+                code=HTTPStatus.OK.value, message="Job status retrieved successfully", param=job_status
+            )
         except Exception as e:
             logger.error(f"Error monitoring job progress: {e}", exc_info=True)
             response = ErrorResponse(
@@ -397,11 +396,11 @@ class EvaluationWorkflow:
         logger.debug(f"Evaluating model {evaluate_model_request}")
 
         instance_id = str(ctx.instance_id)
-        
+
         # Parse request to check if this is monitoring phase
         request_dict = json.loads(evaluate_model_request)
         phase = request_dict.get("phase", "deployment")
-        
+
         if phase == "monitoring":
             # Handle monitoring phase with proper Dapr pattern
             return EvaluationWorkflow._handle_monitoring_phase(ctx, evaluate_model_request)
@@ -523,12 +522,12 @@ class EvaluationWorkflow:
         )
 
         # Log only essential info to avoid large payload serialization issues
-        logger.debug(f"Engine Configuration Creation Result: ConfigMap '{create_config_result.get('param', {}).get('configmap_name')}' in namespace '{create_config_result.get('param', {}).get('namespace')}'")
-
+        logger.debug(
+            f"Engine Configuration Creation Result: ConfigMap '{create_config_result.get('param', {}).get('configmap_name')}' in namespace '{create_config_result.get('param', {}).get('namespace')}'"
+        )
 
         # Print the code value
         logger.debug(f"Engine Configuration Creation Result Code: {create_config_result.get('code')}")
-
 
         # Check if the result code indicates an error (not in 2xx success range)
         result_code = create_config_result.get("code", HTTPStatus.OK.value)
@@ -578,13 +577,21 @@ class EvaluationWorkflow:
                 "env_vars": config_metadata.get("transformed_data", {}).get("job_config", {}).get("env_vars", {}),
                 "cpu_request": config_metadata.get("transformed_data", {}).get("job_config", {}).get("cpu_request"),
                 "cpu_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("cpu_limit"),
-                "memory_request": config_metadata.get("transformed_data", {}).get("job_config", {}).get("memory_request"),
+                "memory_request": config_metadata.get("transformed_data", {})
+                .get("job_config", {})
+                .get("memory_request"),
                 "memory_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("memory_limit"),
                 "ttl_seconds": config_metadata.get("transformed_data", {}).get("job_config", {}).get("ttl_seconds"),
-                "backoff_limit": config_metadata.get("transformed_data", {}).get("job_config", {}).get("backoff_limit"),
-                "output_volume": config_metadata.get("transformed_data", {}).get("job_config", {}).get("output_volume"),
+                "backoff_limit": config_metadata.get("transformed_data", {})
+                .get("job_config", {})
+                .get("backoff_limit"),
+                "output_volume": config_metadata.get("transformed_data", {})
+                .get("job_config", {})
+                .get("output_volume"),
                 "data_volumes": config_metadata.get("transformed_data", {}).get("job_config", {}).get("data_volumes"),
-                "config_volume": config_metadata.get("transformed_data", {}).get("job_config", {}).get("config_volume"),
+                "config_volume": config_metadata.get("transformed_data", {})
+                .get("job_config", {})
+                .get("config_volume"),
             },
         }
 
@@ -664,7 +671,7 @@ class EvaluationWorkflow:
                 "source_topic": evaluate_model_request_json.source_topic,
                 "source": evaluate_model_request_json.source,
                 "model_name": evaluate_model_request_json.eval_model_info.model_name,
-            }
+            },
         }
 
         # Start monitoring using proper Dapr pattern
@@ -674,9 +681,9 @@ class EvaluationWorkflow:
             "job_id": job_id,
             "monitoring_attempt": monitor_request.get("monitoring_attempt", 0),
             "max_attempts": monitor_request.get("max_attempts", 360),
-            "phase": "monitoring"
+            "phase": "monitoring",
         }
-        
+
         ctx.continue_as_new(json.dumps(monitoring_data))
         return
 
@@ -684,28 +691,27 @@ class EvaluationWorkflow:
     def _handle_monitoring_phase(ctx: wf.DaprWorkflowContext, request_str: str):
         """Handle the monitoring phase using proper Dapr continue_as_new pattern."""
         logger = logging.getLogger("::EVAL:: Monitoring Phase")
-        
+
         # Parse the monitoring request
         request_data = json.loads(request_str)
         job_id = request_data["job_id"]
         monitoring_attempt = request_data.get("monitoring_attempt", 0) + 1
         max_attempts = request_data.get("max_attempts", 360)
         instance_id = str(ctx.instance_id)
-        
+
         # Reconstruct EvaluateModelRequest without monitoring fields
-        eval_request_data = {k: v for k, v in request_data.items() 
-                            if k not in ["job_id", "monitoring_attempt", "max_attempts", "phase"]}
-        evaluate_model_request_json = EvaluateModelRequest(**eval_request_data)
-        
+        eval_request_data = {
+            k: v for k, v in request_data.items() if k not in ["job_id", "monitoring_attempt", "max_attempts", "phase"]
+        }
+        evaluate_model_request_json = StartEvaluationRequest(**eval_request_data)
+
         logger.info(f"Monitoring job {job_id}, attempt {monitoring_attempt}/{max_attempts}")
-        
+
         # Check if we've exceeded max attempts
         if monitoring_attempt > max_attempts:
             logger.warning(f"Job {job_id} monitoring timed out after {max_attempts} attempts")
             notification_req = NotificationRequest.from_cloud_event(
-                cloud_event=evaluate_model_request_json, 
-                name="evaluate_model", 
-                workflow_id=instance_id
+                cloud_event=evaluate_model_request_json, name="evaluate_model", workflow_id=instance_id
             )
             notification_req.payload.event = "monitor_eval_job_progress"
             notification_req.payload.content = NotificationContent(
@@ -725,21 +731,21 @@ class EvaluationWorkflow:
         basic_monitor_request = {
             "job_id": job_id,
             "kubeconfig": evaluate_model_request_json.kubeconfig,
-            "namespace": "budeval"
+            "namespace": "budeval",
         }
-        
+
         monitor_result = yield ctx.call_activity(
             EvaluationWorkflow.monitor_eval_job_progress,
             input=json.dumps(basic_monitor_request),
         )
-        
+
         # Handle monitoring activity failure
         if monitor_result.get("code", HTTPStatus.OK.value) != HTTPStatus.OK.value:
             logger.warning(f"Monitoring attempt {monitoring_attempt} failed: {monitor_result.get('message')}")
-            
+
             # Wait and continue monitoring
             yield ctx.create_timer(fire_at=ctx.current_utc_datetime + timedelta(seconds=5))
-            
+
             request_data["monitoring_attempt"] = monitoring_attempt
             ctx.continue_as_new(json.dumps(request_data))
             return
@@ -747,11 +753,11 @@ class EvaluationWorkflow:
         job_status_data = monitor_result.get("param", {})
         job_status = job_status_data.get("status", "unknown")
         job_details_info = job_status_data.get("details", {})
-        
+
         # Check if job is completed
         job_completed = False
         final_job_status = None
-        
+
         if job_status in ["completed", "succeeded", "failed", "error"]:
             job_completed = True
             final_job_status = job_status_data
@@ -763,14 +769,14 @@ class EvaluationWorkflow:
             except (ValueError, TypeError):
                 succeeded = 0
                 failed = 0
-            
+
             if succeeded > 0:
                 job_completed = True
                 final_job_status = job_status_data
                 final_job_status["status"] = "succeeded"
                 logger.info(f"Job {job_id} succeeded")
             elif failed > 0:
-                job_completed = True  
+                job_completed = True
                 final_job_status = job_status_data
                 final_job_status["status"] = "failed"
                 logger.info(f"Job {job_id} failed")
@@ -780,9 +786,7 @@ class EvaluationWorkflow:
             final_status = final_job_status.get("status", "unknown")
 
             notification_req = NotificationRequest.from_cloud_event(
-                cloud_event=evaluate_model_request_json, 
-                name="evaluate_model", 
-                workflow_id=instance_id
+                cloud_event=evaluate_model_request_json, name="evaluate_model", workflow_id=instance_id
             )
 
             if final_status in ["succeeded", "completed"]:
@@ -793,7 +797,7 @@ class EvaluationWorkflow:
                     "job_id": job_id,
                     "model_name": evaluate_model_request_json.eval_model_info.model_name,
                     "namespace": "budeval",
-                    "kubeconfig": evaluate_model_request_json.kubeconfig
+                    "kubeconfig": evaluate_model_request_json.kubeconfig,
                 }
 
                 extract_result = yield ctx.call_activity(
@@ -808,7 +812,7 @@ class EvaluationWorkflow:
                         title="Job completed successfully",
                         message=f"Job {job_id} completed successfully. Results processed: {results_info.get('datasets_processed', 0)} datasets, {results_info.get('overall_accuracy', 0):.2f}% accuracy",
                         status=WorkflowStatus.COMPLETED,
-                        result=results_info
+                        result=results_info,
                     )
                 else:
                     notification_req.payload.event = "monitor_eval_job_progress"
@@ -840,12 +844,10 @@ class EvaluationWorkflow:
                 )
                 return
 
-        # Job still running - send progress notification if needed  
+        # Job still running - send progress notification if needed
         if monitoring_attempt % 10 == 0:  # Every 50 seconds
             notification_req = NotificationRequest.from_cloud_event(
-                cloud_event=evaluate_model_request_json, 
-                name="evaluate_model", 
-                workflow_id=instance_id
+                cloud_event=evaluate_model_request_json, name="evaluate_model", workflow_id=instance_id
             )
             notification_req.payload.event = "monitor_eval_job_progress"
             notification_req.payload.content = NotificationContent(
@@ -862,10 +864,11 @@ class EvaluationWorkflow:
 
         # Job still running - set timer and continue monitoring
         yield ctx.create_timer(fire_at=ctx.current_utc_datetime + timedelta(seconds=5))
-        
+
         # Continue as new with updated attempt count
         request_data["monitoring_attempt"] = monitoring_attempt
         ctx.continue_as_new(json.dumps(request_data))
+
     async def __call__(
         self, request: StartEvaluationRequest, workflow_id: str | None = None
     ) -> WorkflowMetadataResponse | ErrorResponse:

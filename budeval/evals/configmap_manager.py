@@ -52,9 +52,9 @@ class ConfigMapManager:
                     except json.JSONDecodeError:
                         try:
                             kubeconfig_dict = yaml.safe_load(kubeconfig)
-                        except yaml.YAMLError:
+                        except yaml.YAMLError as e:
                             logger.error("Invalid kubeconfig format")
-                            raise ValueError("Invalid kubeconfig format")
+                            raise ValueError("Invalid kubeconfig format") from e
                 else:
                     kubeconfig_dict = kubeconfig
 
@@ -149,9 +149,9 @@ class ConfigMapManager:
                 dataset_imports = ["from opencompass.datasets import mmlu_datasets"]
                 dataset_list = ["mmlu_datasets"]
 
-            imports_str = "\n".join(dataset_imports)
+            "\n".join(dataset_imports)
             # For simplicity, just use the first dataset to avoid LazyObject concatenation issues
-            datasets_str = dataset_list[0]
+            dataset_list[0]
 
             eval_config_content = f"""# Complete evaluation configuration for {eval_request_id}
 from opencompass.models import OpenAI
@@ -218,13 +218,13 @@ work_dir = '/workspace/outputs'
             # Create or update ConfigMap
             try:
                 # Try to create new ConfigMap
-                result = k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
+                k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
                 logger.info(f"Created ConfigMap {configmap_name} in namespace {self.namespace}")
                 action = "created"
             except ApiException as e:
                 if e.status == 409:  # Already exists
                     # Update existing ConfigMap
-                    result = k8s_client.patch_namespaced_config_map(
+                    k8s_client.patch_namespaced_config_map(
                         name=configmap_name, namespace=self.namespace, body=configmap
                     )
                     logger.info(f"Updated existing ConfigMap {configmap_name} in namespace {self.namespace}")
@@ -295,13 +295,13 @@ work_dir = '/workspace/outputs'
             # Create or update ConfigMap
             try:
                 # Try to create new ConfigMap
-                result = k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
+                k8s_client.create_namespaced_config_map(namespace=self.namespace, body=configmap)
                 logger.info(f"Created ConfigMap {configmap_name} in namespace {self.namespace}")
                 action = "created"
             except ApiException as e:
                 if e.status == 409:  # Already exists
                     # Update existing ConfigMap
-                    result = k8s_client.patch_namespaced_config_map(
+                    k8s_client.patch_namespaced_config_map(
                         name=configmap_name, namespace=self.namespace, body=configmap
                     )
                     logger.info(f"Updated existing ConfigMap {configmap_name} in namespace {self.namespace}")

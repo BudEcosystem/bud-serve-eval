@@ -18,6 +18,7 @@ class EnginePreloader:
     _preloaded_engines = set()
 
     def __init__(self):
+        """Initialize the engine preloader with an Ansible orchestrator."""
         self.orchestrator = AnsibleOrchestrator()
 
     async def preload_all_engines(self, kubeconfig: Optional[str] = None):
@@ -122,7 +123,7 @@ class EnginePreloader:
     async def _preload_engines(
         self, operation_id: str, engine_images: List[Dict[str, str]], kubeconfig: Optional[str]
     ):
-        """Internal method to run the engine preloading process.
+        """Run the engine preloading process.
 
         Args:
             operation_id: Unique operation identifier

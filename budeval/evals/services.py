@@ -59,7 +59,7 @@ class EvaluationOpsService:
             except KeyError as e:
                 logger.error(f"Engine {evaluate_model_request.engine} not found in registry: {e}")
                 logger.error(f"Available engines: {list(registered_engines.keys())}")
-                raise ValueError(f"Unsupported engine: {evaluate_model_request.engine}")
+                raise ValueError(f"Unsupported engine: {evaluate_model_request.engine}") from e
 
             # Prepare engine arguments
             engine_args = {
@@ -126,7 +126,6 @@ class EvaluationOpsService:
             if not job_config.get("args"):
                 logger.info("Args missing from job_config, regenerating command...")
                 try:
-
                     # TODO: Regenerate command using transformer
 
                     from uuid import UUID
@@ -141,22 +140,25 @@ class EvaluationOpsService:
                     from budeval.core.transformers.opencompass_transformer import OpenCompassTransformer
 
                     # Create a generic request from the original request
-                    datasets = [GenericDatasetConfig(name=d, category="custom")
-                              for d in evaluate_model_request.dataset if isinstance(d, str)]
+                    datasets = [
+                        GenericDatasetConfig(name=d, category="custom")
+                        for d in evaluate_model_request.dataset
+                        if isinstance(d, str)
+                    ]
 
                     # Create model config
                     model_config = GenericModelConfig(
                         name=evaluate_model_request.eval_request_id,
                         type=ModelType.API,
                         api_key=evaluate_model_request.api_key,
-                        base_url=evaluate_model_request.base_url
+                        base_url=evaluate_model_request.base_url,
                     )
 
                     generic_request = GenericEvaluationRequest(
                         eval_request_id=UUID(evaluate_model_request.eval_request_id),
                         engine=EvaluationEngine.OPENCOMPASS,
                         model=model_config,
-                        datasets=datasets
+                        datasets=datasets,
                     )
 
                     # Regenerate command using transformer
@@ -172,7 +174,9 @@ class EvaluationOpsService:
                     job_config["args"] = ["echo 'Command regeneration failed'; exit 1"]
 
             logger.info(f"Job config command: {job_config.get('command')}")
-            logger.info(f"Job config args: {job_config.get('args', [''])[0][:200] if job_config.get('args') else 'None'}")
+            logger.info(
+                f"Job config args: {job_config.get('args', [''])[0][:200] if job_config.get('args') else 'None'}"
+            )
 
             logger.info(f"Creating job with UUID: {job_uuid}")
             logger.info(f"Using engine: {job_config.get('engine')}, Docker image: {job_config.get('image')}")

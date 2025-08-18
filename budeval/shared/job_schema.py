@@ -20,6 +20,8 @@ class Job(BaseModel):
     # TODO: Add Docker-specific fields here if needed
 
     class Config:
+        """Pydantic configuration with example schema."""
+
         schema_extra = {
             "example": {
                 "uuid": "run-123",
