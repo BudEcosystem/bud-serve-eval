@@ -128,13 +128,25 @@ class OpenCompassTransformer(BaseTransformer):
             opencompass_name = self.get_dataset_mapping(dataset.name)
             if opencompass_name:
                 dataset_names.append(opencompass_name)
+                logger.info(f"Mapped dataset {dataset.name} -> {opencompass_name}")
             else:
-                logger.warning(f"No mapping found for dataset {dataset.name}")
+                logger.warning(f"No mapping found for dataset {dataset.name}, using original name: {dataset.name}")
+                dataset_names.append(dataset.name)
+
+        # If no datasets found, fall back to the original requested names
+        if not dataset_names:
+            dataset_names = [d.name for d in request.datasets]
+            logger.warning(f"No dataset mappings found, using original names: {dataset_names}")
+
+        logger.info(f"Final dataset list for OpenCompass: {dataset_names}")
 
         # Create a model-only config file
         debug_flag = ""
         if request.debug:
             debug_flag = " \\\n    --debug"
+
+        datasets_str = " ".join(dataset_names)
+        logger.debug(f"Generated datasets string: {datasets_str}")
 
         script = f"""
 # Create a model config file that uses environment variables
@@ -164,12 +176,15 @@ cd /workspace
 # Run OpenCompass evaluation with model config and datasets via CLI
 python /workspace/run.py \\
     --models bud_model \\
-    --datasets demo_gsm8k_chat_gen \\
+    --datasets {datasets_str} \\
     --work-dir /workspace/outputs \\
     --max-num-workers {request.num_workers}{debug_flag}
 """
 
         args = [script.strip()]
+
+        logger.debug(f"Generated OpenCompass command: {command}")
+        logger.debug(f"Generated script content:\n{script}")
 
         return command, args
 
@@ -220,36 +235,59 @@ python /workspace/run.py \\
         if request.model.type == ModelType.API:
             if request.model.api_key:
                 env_vars["OPENAI_API_KEY"] = request.model.api_key
+                logger.debug("Added API key to environment variables")
             if request.model.base_url:
                 env_vars["OPENAI_API_BASE"] = request.model.base_url
+                logger.debug(f"Added API base URL to environment variables: {request.model.base_url}")
 
         # Add any additional environment variables from the request
         if "env_vars" in request.extra_params:
-            env_vars.update(request.extra_params["env_vars"])
+            additional_vars = request.extra_params["env_vars"]
+            env_vars.update(additional_vars)
+            logger.debug(f"Added additional environment variables: {list(additional_vars.keys())}")
+
+        logger.info(f"Generated {len(env_vars)} environment variables for OpenCompass")
+        logger.debug(f"Environment variables (without sensitive values): {[k for k in env_vars.keys()]}")
 
         return env_vars
 
     def validate_request(self, request: GenericEvaluationRequest) -> None:
         """Validate that the request is compatible with OpenCompass."""
+        logger.info(f"Validating request for model: {request.model.name}, type: {request.model.type}")
+        logger.info(f"Request includes {len(request.datasets)} dataset(s): {[d.name for d in request.datasets]}")
+        
         # Check if model type is supported
         if request.model.type not in [ModelType.API]:
+            logger.error(f"Unsupported model type: {request.model.type}")
             raise ValueError(f"OpenCompass transformer currently only supports API models, got {request.model.type}")
 
         # Check if API model has required fields
         if request.model.type == ModelType.API:
             if not request.model.api_key:
+                logger.error("Missing API key for API model")
                 raise ValueError("API key is required for API models")
             if not request.model.base_url:
+                logger.error("Missing base URL for API model")
                 raise ValueError("Base URL is required for API models")
+            
+            logger.debug("API model validation passed - has api_key and base_url")
 
         # Check if datasets are supported
         unsupported = []
+        supported = []
         for dataset in request.datasets:
             if dataset.name.lower() not in self._dataset_mappings:
                 unsupported.append(dataset.name)
+            else:
+                supported.append(dataset.name)
 
+        if supported:
+            logger.info(f"Found mappings for datasets: {supported}")
+        
         if unsupported:
             logger.warning(f"The following datasets may not be supported by OpenCompass: {unsupported}")
+            
+        logger.info("Request validation completed successfully")
 
     def get_supported_datasets(self) -> List[str]:
         """Get list of datasets supported by OpenCompass."""

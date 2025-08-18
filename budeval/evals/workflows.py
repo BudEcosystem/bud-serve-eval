@@ -400,10 +400,14 @@ class EvaluationWorkflow:
         # Parse request to check if this is monitoring phase
         request_dict = json.loads(evaluate_model_request)
         phase = request_dict.get("phase", "deployment")
+        
+        logger.debug(f"Workflow phase: {phase}")
 
         if phase == "monitoring":
             # Handle monitoring phase with proper Dapr pattern
-            return EvaluationWorkflow._handle_monitoring_phase(ctx, evaluate_model_request)
+            logger.info("Transitioning to monitoring phase")
+            yield from EvaluationWorkflow._handle_monitoring_phase(ctx, evaluate_model_request)
+            return
 
         # Continue with deployment phase
         logger.info(f"Evaluating model for instance_id: {instance_id}")
@@ -674,16 +678,21 @@ class EvaluationWorkflow:
             },
         }
 
+        logger.debug(f"Prepared monitor request: {monitor_request}")
+
         # Start monitoring using proper Dapr pattern
         # Add monitoring state to the request and continue as new
         monitoring_data = {
-            **evaluate_model_request_json.model_dump(),
+            **evaluate_model_request_json.model_dump(mode="json"),
             "job_id": job_id,
             "monitoring_attempt": monitor_request.get("monitoring_attempt", 0),
             "max_attempts": monitor_request.get("max_attempts", 360),
             "phase": "monitoring",
         }
 
+        logger.info(f"Continuing workflow as monitoring phase for job_id: {job_id}")
+        logger.debug(f"Monitoring data: {json.dumps(monitoring_data, indent=2)}")
+        
         ctx.continue_as_new(json.dumps(monitoring_data))
         return
 
@@ -692,20 +701,28 @@ class EvaluationWorkflow:
         """Handle the monitoring phase using proper Dapr continue_as_new pattern."""
         logger = logging.getLogger("::EVAL:: Monitoring Phase")
 
+        logger.debug(f"Monitoring phase handler called with request: {request_str[:200]}...")
+
         # Parse the monitoring request
-        request_data = json.loads(request_str)
-        job_id = request_data["job_id"]
-        monitoring_attempt = request_data.get("monitoring_attempt", 0) + 1
-        max_attempts = request_data.get("max_attempts", 360)
-        instance_id = str(ctx.instance_id)
+        try:
+            request_data = json.loads(request_str)
+            job_id = request_data["job_id"]
+            monitoring_attempt = request_data.get("monitoring_attempt", 0) + 1
+            max_attempts = request_data.get("max_attempts", 360)
+            instance_id = str(ctx.instance_id)
 
-        # Reconstruct EvaluateModelRequest without monitoring fields
-        eval_request_data = {
-            k: v for k, v in request_data.items() if k not in ["job_id", "monitoring_attempt", "max_attempts", "phase"]
-        }
-        evaluate_model_request_json = StartEvaluationRequest(**eval_request_data)
+            logger.debug(f"Parsed monitoring data - job_id: {job_id}, attempt: {monitoring_attempt}, max_attempts: {max_attempts}")
 
-        logger.info(f"Monitoring job {job_id}, attempt {monitoring_attempt}/{max_attempts}")
+            # Reconstruct EvaluateModelRequest without monitoring fields
+            eval_request_data = {
+                k: v for k, v in request_data.items() if k not in ["job_id", "monitoring_attempt", "max_attempts", "phase"]
+            }
+            evaluate_model_request_json = StartEvaluationRequest(**eval_request_data)
+
+            logger.info(f"Monitoring job {job_id}, attempt {monitoring_attempt}/{max_attempts}")
+        except Exception as e:
+            logger.error(f"Error parsing monitoring request: {e}", exc_info=True)
+            return
 
         # Check if we've exceeded max attempts
         if monitoring_attempt > max_attempts:
@@ -725,7 +742,7 @@ class EvaluationWorkflow:
                 target_topic_name=evaluate_model_request_json.source_topic,
                 target_name=evaluate_model_request_json.source,
             )
-            return
+            return  # End workflow on timeout
 
         # Check job status
         basic_monitor_request = {
@@ -868,6 +885,7 @@ class EvaluationWorkflow:
         # Continue as new with updated attempt count
         request_data["monitoring_attempt"] = monitoring_attempt
         ctx.continue_as_new(json.dumps(request_data))
+        return  # Required return after continue_as_new
 
     async def __call__(
         self, request: StartEvaluationRequest, workflow_id: str | None = None

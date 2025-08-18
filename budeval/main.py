@@ -179,6 +179,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db.connect()
         logger.info("Database connection initialized successfully")
 
+        # Initialize ClickHouse storage if configured
+        logger.info("Initializing storage backend")
+        from .evals.storage.factory import get_storage_adapter, initialize_storage
+        
+        try:
+            storage = get_storage_adapter()
+            await initialize_storage(storage)
+            logger.info("Storage backend initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize storage backend: {e}")
+            # Don't fail startup if storage initialization fails
+        
         # Initialize volume for dataset storage
         volume_init = VolumeInitializer()
         logger.info("Creating background task for volume initialization")

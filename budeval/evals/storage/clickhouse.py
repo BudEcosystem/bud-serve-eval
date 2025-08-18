@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from asynch.pool import Pool
@@ -34,7 +35,7 @@ class ClickHouseStorage(StorageAdapter):
         self._config = secrets_settings
 
     async def initialize(self) -> None:
-        """Initialize connection pool."""
+        """Initialize connection pool and run migrations if needed."""
         if self._pool is not None:
             return
 
@@ -66,9 +67,54 @@ class ClickHouseStorage(StorageAdapter):
             await self._pool.startup()
             logger.info("ClickHouse connection pool initialized successfully")
 
+            # Run database migrations
+            await self._run_migrations()
+
         except Exception as e:
             logger.error(f"Failed to initialize ClickHouse pool: {e}")
             raise
+
+    async def _run_migrations(self) -> None:
+        """Run ClickHouse database migrations."""
+        logger.info("Running ClickHouse database migrations")
+        
+        try:
+            # Read migration file
+            migration_file = Path(__file__).parent.parent.parent.parent / "migrations" / "001_initial_schema.sql"
+            
+            if not migration_file.exists():
+                logger.warning(f"Migration file not found: {migration_file}")
+                return
+                
+            with open(migration_file, 'r') as f:
+                migration_sql = f.read()
+            
+            # Split migration into individual statements (excluding comments and empty lines)
+            statements = []
+            for line in migration_sql.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('--'):
+                    statements.append(line)
+            
+            # Join and split by semicolon
+            full_sql = ' '.join(statements)
+            commands = [cmd.strip() for cmd in full_sql.split(';') if cmd.strip()]
+            
+            async with self.get_connection() as conn, conn.cursor() as cursor:
+                for command in commands:
+                    try:
+                        logger.debug(f"Executing migration command: {command[:50]}...")
+                        await cursor.execute(command)
+                    except Exception as e:
+                        # Log error but continue with other commands (some may already exist)
+                        logger.warning(f"Migration command failed (might already exist): {str(e)[:100]}")
+                        continue
+                        
+            logger.info("ClickHouse database migrations completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to run ClickHouse migrations: {e}")
+            # Don't raise - allow app to continue even if migrations fail
 
     async def close(self) -> None:
         """Close the connection pool."""
