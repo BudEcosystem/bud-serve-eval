@@ -229,3 +229,205 @@ async def delete_configmap(eval_request_id: str, kubeconfig: str | None = None):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete ConfigMap: {str(e)}") from e
+
+
+@evals_routes.get("/results/{job_id}")
+async def get_evaluation_results(job_id: str):
+    """Get complete evaluation results for a job.
+
+    Args:
+        job_id (str): The job ID to retrieve results for.
+
+    Returns:
+        dict: Complete evaluation results
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+        results = await storage.get_results(job_id)
+
+        if not results:
+            raise HTTPException(status_code=404, detail=f"Results not found for job: {job_id}")
+
+        return {"status": "success", "data": results}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve results: {str(e)}") from e
+
+
+@evals_routes.get("/results/{job_id}/summary")
+async def get_evaluation_summary(job_id: str):
+    """Get evaluation summary for a job.
+
+    Args:
+        job_id (str): The job ID to retrieve summary for.
+
+    Returns:
+        dict: Evaluation summary
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+        results = await storage.get_results(job_id)
+
+        if not results:
+            raise HTTPException(status_code=404, detail=f"Results not found for job: {job_id}")
+
+        # Extract summary from results
+        summary = results.get("summary", {})
+        return {"status": "success", "data": summary}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve summary: {str(e)}") from e
+
+
+@evals_routes.get("/results/{job_id}/datasets/{dataset_name}")
+async def get_dataset_results(job_id: str, dataset_name: str):
+    """Get results for a specific dataset.
+
+    Args:
+        job_id (str): The job ID to retrieve results for.
+        dataset_name (str): The name of the dataset.
+
+    Returns:
+        dict: Dataset-specific results
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+        results = await storage.get_results(job_id)
+
+        if not results:
+            raise HTTPException(status_code=404, detail=f"Results not found for job: {job_id}")
+
+        # Find the specific dataset
+        datasets = results.get("datasets", [])
+        for dataset in datasets:
+            if dataset.get("dataset_name") == dataset_name:
+                return {"status": "success", "data": dataset}
+
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' not found in job results")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve dataset results: {str(e)}") from e
+
+
+@evals_routes.get("/results/{job_id}/metrics")
+async def get_evaluation_metrics(job_id: str):
+    """Get aggregated metrics for a job.
+
+    Args:
+        job_id (str): The job ID to retrieve metrics for.
+
+    Returns:
+        dict: Aggregated evaluation metrics
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+        results = await storage.get_results(job_id)
+
+        if not results:
+            raise HTTPException(status_code=404, detail=f"Results not found for job: {job_id}")
+
+        # Extract metrics from summary
+        summary = results.get("summary", {})
+        metrics = {
+            "overall_accuracy": summary.get("overall_accuracy", 0.0),
+            "total_datasets": summary.get("total_datasets", 0),
+            "total_examples": summary.get("total_examples", 0),
+            "total_correct": summary.get("total_correct", 0),
+            "dataset_accuracies": summary.get("dataset_accuracies", {}),
+            "model_name": summary.get("model_name", "unknown"),
+        }
+
+        return {"status": "success", "data": metrics}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve metrics: {str(e)}") from e
+
+
+@evals_routes.get("/results")
+async def list_evaluation_results():
+    """List all available evaluation results.
+
+    Returns:
+        dict: List of job IDs with available results
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+        job_ids = await storage.list_results()
+
+        # Get metadata for each job
+        results_list = []
+        for job_id in job_ids:
+            metadata = await storage.get_metadata(job_id)
+            if metadata:
+                results_list.append({
+                    "job_id": job_id,
+                    "stored_at": metadata.get("stored_at"),
+                    "storage_type": metadata.get("storage_type")
+                })
+            else:
+                results_list.append({"job_id": job_id})
+
+        return {
+            "status": "success",
+            "data": {
+                "total_results": len(job_ids),
+                "results": results_list
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list results: {str(e)}") from e
+
+
+@evals_routes.delete("/results/{job_id}")
+async def delete_evaluation_results(job_id: str):
+    """Delete evaluation results for a job.
+
+    Args:
+        job_id (str): The job ID to delete results for.
+
+    Returns:
+        dict: Deletion result
+    """
+    try:
+        from budeval.evals.storage.filesystem import FilesystemStorage
+
+        storage = FilesystemStorage()
+
+        # Check if results exist
+        if not await storage.exists(job_id):
+            raise HTTPException(status_code=404, detail=f"Results not found for job: {job_id}")
+
+        # Delete results
+        success = await storage.delete_results(job_id)
+
+        if success:
+            return {
+                "status": "success",
+                "message": f"Results deleted successfully for job: {job_id}"
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to delete results for job: {job_id}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete results: {str(e)}") from e

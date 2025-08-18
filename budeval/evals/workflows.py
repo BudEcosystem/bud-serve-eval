@@ -283,6 +283,65 @@ class EvaluationWorkflow:
 
     @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
     @staticmethod
+    def extract_and_process_results(
+        ctx: wf.WorkflowActivityContext,
+        extract_request: str,
+    ) -> dict:
+        """Extract and process evaluation results from PVC.
+
+        Args:
+            ctx (WorkflowActivityContext): The context of the Dapr workflow
+            extract_request (str): A JSON string containing the extraction request parameters
+                including job_id, model_name, namespace, and kubeconfig.
+        """
+        logger = logging.getLogger("::EVAL:: Extract Results")
+        logger.debug(f"Extracting results for {extract_request}")
+
+        extract_request_json = json.loads(extract_request)
+        job_id = extract_request_json["job_id"]
+        model_name = extract_request_json["model_name"]
+        namespace = extract_request_json.get("namespace", "budeval")
+        kubeconfig = extract_request_json.get("kubeconfig")
+
+        response: SuccessResponse | ErrorResponse
+        try:
+            from budeval.evals.results_processor import ResultsProcessor
+            from budeval.evals.storage.filesystem import FilesystemStorage
+
+            # Initialize processor with filesystem storage
+            storage = FilesystemStorage()
+            processor = ResultsProcessor(storage)
+
+            # Extract and process results
+            import asyncio
+            results = asyncio.run(processor.extract_and_process(
+                job_id=job_id,
+                model_name=model_name,
+                namespace=namespace,
+                kubeconfig=kubeconfig
+            ))
+
+            logger.info(f"Successfully processed results for job {job_id}")
+            response = SuccessResponse(
+                code=HTTPStatus.OK.value,
+                message="Results extracted and processed successfully",
+                param={
+                    "job_id": job_id,
+                    "datasets_processed": len(results.datasets),
+                    "overall_accuracy": results.summary.overall_accuracy,
+                    "storage_path": results.extraction_path
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error extracting results: {e}", exc_info=True)
+            response = ErrorResponse(
+                message=f"Error extracting results: {str(e)}",
+                code=HTTPStatus.INTERNAL_SERVER_ERROR.value
+            )
+        return response.model_dump(mode="json")
+
+    @dapr_workflows.register_activity  # type: ignore [reportUnknownReturnType,reportArgumentType] # noqa
+    @staticmethod
     def monitor_eval_job_progress(
         ctx: wf.WorkflowActivityContext,
         monitor_request: str,
@@ -668,13 +727,45 @@ class EvaluationWorkflow:
             final_status = final_job_status.get("status", "unknown")
 
             if final_status in ["succeeded", "completed"]:
-                # Job succeeded
-                notification_req.payload.event = "monitor_eval_job_progress"
-                notification_req.payload.content = NotificationContent(
-                    title="Job monitoring completed - Success",
-                    message=f"Job {job_id} completed successfully",
-                    status=WorkflowStatus.COMPLETED,
+                # Job succeeded - now extract and process results
+                logger.info(f"Job {job_id} succeeded, extracting results")
+
+                # Prepare extraction request
+                extract_request = {
+                    "job_id": job_id,
+                    "model_name": evaluate_model_request_json.eval_model_info.model_name,
+                    "namespace": "budeval",
+                    "kubeconfig": evaluate_model_request_json.kubeconfig
+                }
+
+                # Extract and process results
+                extract_result = yield ctx.call_activity(
+                    EvaluationWorkflow.extract_and_process_results,
+                    input=json.dumps(extract_request),
                 )
+
+                logger.debug(f"Extract results activity result: {extract_result}")
+
+                if extract_result.get("code", HTTPStatus.OK.value) == HTTPStatus.OK.value:
+                    # Results extracted successfully
+                    results_info = extract_result.get("param", {})
+                    notification_req.payload.event = "monitor_eval_job_progress"
+                    notification_req.payload.content = NotificationContent(
+                        title="Job monitoring completed - Success",
+                        message=f"Job {job_id} completed successfully. Results processed: {results_info.get('datasets_processed', 0)} datasets, {results_info.get('overall_accuracy', 0):.2f}% accuracy",
+                        status=WorkflowStatus.COMPLETED,
+                        result=results_info
+                    )
+                else:
+                    # Results extraction failed, but job succeeded
+                    logger.warning(f"Job {job_id} succeeded but results extraction failed: {extract_result.get('message')}")
+                    notification_req.payload.event = "monitor_eval_job_progress"
+                    notification_req.payload.content = NotificationContent(
+                        title="Job completed - Results extraction failed",
+                        message=f"Job {job_id} completed successfully but results extraction failed: {extract_result.get('message')}",
+                        status=WorkflowStatus.COMPLETED,
+                    )
+
                 dapr_workflows.publish_notification(
                     workflow_id=instance_id,
                     notification=notification_req,
