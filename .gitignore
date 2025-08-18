@@ -70,3 +70,5 @@ k3s.yaml
 repomix.config.json
 TASK_PROGRESS.md
 test_configmap.sh
+
+.claude
