@@ -147,8 +147,8 @@ import os
 models = [
     dict(
         type=OpenAISDK,
-        abbr='{request.eval_request_id}',
-        path='{request.model.name}',  # Custom model name
+        abbr=os.environ.get('MODEL_NAME', 'qwen3-4b'),
+        path=os.environ.get('MODEL_NAME', 'qwen3-4b'),  # Actual model name for API
         key=os.environ.get('OPENAI_API_KEY'),
         openai_api_base=os.environ.get('OPENAI_API_BASE'),
         query_per_second={int(request.model.extra_params.get("query_per_second", "1"))},
@@ -200,6 +200,7 @@ python /workspace/run.py \\
         Sets up:
         - Cache directories for HuggingFace, Transformers, and PyTorch
         - API credentials (OPENAI_API_KEY and OPENAI_API_BASE)
+        - Model name for correct API calls
         - Any additional environment variables from request.extra_params
 
         Args:
@@ -213,6 +214,7 @@ python /workspace/run.py \\
             "TRANSFORMERS_CACHE": "/workspace/cache/transformers",
             "TORCH_HOME": "/workspace/cache/torch",
             "ENGINE_ARGS": json.dumps(request.model.extra_params),
+            "MODEL_NAME": request.model.name,  # Pass model name as env var
         }
 
         # Add API configuration as environment variables

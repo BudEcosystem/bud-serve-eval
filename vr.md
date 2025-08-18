@@ -35,3 +35,45 @@ dapr run --run-file ./app.yaml
 │ Extracting /root/.cache/opencompass/data/gsm8k.zip to /root/.cache/opencompass/data                                                                                                                                                  │
 │ Map:   0%|          | 0/7473 [00:00<?, ? examples/s]Map:   5%|▍         | 337/7473 [00:00<00:02, 2675.50 examples/s]Map:  10%|▉         | 723/7473 [00:00<00:02, 3133.66 examples/s]Map:  15%|█▍        | 1088/7473 [00:00<00:01, 32 │
 │ Map:   0%|          | 0/1319 [00:00<?, ? examples/s]Map:  21%|██        | 272/1319 [00:00<00:00, 2601.76 examples/s]Map:  44%|████▎     | 576/
+
+
+
+
+
+
+
+
+
+------
+
+
+ OpenCompass Evaluation Results Structure
+
+  The evaluation completed successfully with 42.19% accuracy on demo_gsm8k dataset. Here's the complete volume structure
+  at /workspace/outputs/20250818_005107/:
+
+  /workspace/outputs/20250818_005107/
+  ├── configs/
+  │   └── 20250818_005107_1.py          # Generated OpenCompass configuration
+  ├── predictions/qwen3-4b/
+  │   └── demo_gsm8k.json               # Model predictions (432KB)
+  ├── results/qwen3-4b/
+  │   └── demo_gsm8k.json               # Evaluation results (16KB)
+  ├── summary/
+  │   ├── summary_20250818_005107.csv   # Results CSV: accuracy=42.19%
+  │   ├── summary_20250818_005107.md    # Markdown summary
+  │   └── summary_20250818_005107.txt   # Text summary
+  └── logs/
+      ├── infer/qwen3-4b/
+      │   └── demo_gsm8k.out            # Inference logs
+      └── eval/qwen3-4b/
+          └── demo_gsm8k.out            # Evaluation logs
+
+  Key findings:
+  - Results are organized by model name (qwen3-4b instead of request ID)
+  - Predictions file contains full Q&A pairs with model reasoning
+  - Results file contains scored evaluations
+  - Summary provides final metrics in multiple formats
+  - All model name fixes are working correctly
+
+  The evaluation system is now fully functional and producing structured results.
