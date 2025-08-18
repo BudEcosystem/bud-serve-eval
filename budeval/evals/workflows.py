@@ -306,11 +306,15 @@ class EvaluationWorkflow:
         response: SuccessResponse | ErrorResponse
         try:
             from budeval.evals.results_processor import ResultsProcessor
-            from budeval.evals.storage.filesystem import FilesystemStorage
+            from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-            # Initialize processor with filesystem storage
-            storage = FilesystemStorage()
+            # Initialize processor with configured storage backend
+            storage = get_storage_adapter()
             processor = ResultsProcessor(storage)
+            
+            # Initialize storage if needed (e.g., ClickHouse connection pool)
+            if hasattr(storage, 'initialize'):
+                asyncio.run(initialize_storage(storage))
 
             # Extract and process results
             import asyncio

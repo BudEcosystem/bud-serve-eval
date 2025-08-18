@@ -51,6 +51,24 @@ class SecretsConfig(BaseSecretsConfig):
     name: str = __version__.split("@")[0]
     version: str = __version__.split("@")[-1]
 
+    # ClickHouse Configuration
+    clickhouse_host: str = "okb80nfy88.ap-southeast-1.aws.clickhouse.cloud"
+    clickhouse_port: int = 9440  # Secure native TCP port for ClickHouse Cloud
+    clickhouse_database: str = "budeval"
+    clickhouse_user: str = "default"
+    clickhouse_password: str = "N_8Bq67UGItUD"
+
+    # ClickHouse Performance Settings
+    clickhouse_batch_size: int = 1000
+    clickhouse_pool_min_size: int = 1
+    clickhouse_pool_max_size: int = 10
+    clickhouse_async_insert: bool = True
+    clickhouse_compression: str = "zstd"
+    clickhouse_secure: bool = True  # Use SSL for ClickHouse Cloud
+
+    # Storage Backend Selection
+    storage_backend: str = "clickhouse"  # "filesystem" or "clickhouse"
+
 
 app_settings = AppConfig()  # type: ignore[reportCallIssue]
 secrets_settings = SecretsConfig()  # type: ignore[reportCallIssue]

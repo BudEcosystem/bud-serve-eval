@@ -1,171 +1,210 @@
 #!/usr/bin/env python3
-"""End-to-end test for evaluation API with debugging."""
+"""
+End-to-end evaluation test with ClickHouse integration.
+"""
 
+import asyncio
 import json
-import subprocess
 import time
+import sys
 import uuid
-
+from pathlib import Path
 import requests
 
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent))
 
-def test_evaluation_api():
-    """Test the evaluation API end-to-end."""
-    # Generate dynamic eval_request_id
-    eval_request_id = str(uuid.uuid4())
+from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-    # API endpoint
-    base_url = "http://localhost:8099"
 
-    # Test payload with gsm8k dataset
-    payload = {
-        "eval_request_id": eval_request_id,
-        "engine": "opencompass",
-        "model_name": "qwen3-4b",  # Using the working model from CLAUDE.md
-        "api_key": "sk-dummy-key",  # OpenCompass doesn't validate this for open endpoints
-        "base_url": "http://20.66.97.208/v1",  # Using the working endpoint from CLAUDE.md
-        "datasets": ["gsm8k"],
-    }
-
-    print("=== Starting Evaluation Test ===")
-    print(f"Eval Request ID: {eval_request_id}")
-    print(f"Payload: {json.dumps(payload, indent=2)}")
-
-    # Step 1: Submit evaluation request
-    print("\n--- Step 1: Submitting evaluation request ---")
+def test_api_endpoint():
+    """Test the API endpoint first."""
     try:
-        response = requests.post(f"{base_url}/evals/start", json=payload)
-        print(f"Response Status: {response.status_code}")
-        print(f"Response Body: {json.dumps(response.json(), indent=2)}")
-
-        if response.status_code != 200:
-            print("ERROR: Failed to submit evaluation request")
+        response = requests.get("http://localhost:8099/health")
+        if response.status_code == 200:
+            print("✅ API is running")
+            return True
+        else:
+            print(f"❌ API returned status {response.status_code}")
             return False
-
-        workflow_id = response.json().get("workflow_id")
-        print(f"Workflow ID: {workflow_id}")
-
     except Exception as e:
-        print(f"ERROR: Failed to submit request - {e}")
+        print(f"❌ API not reachable: {e}")
         return False
 
-    # Step 2: Wait a bit for job to be created
-    print("\n--- Step 2: Waiting for job creation ---")
-    time.sleep(10)
 
-    # Step 3: Check Kubernetes job status
-    print("\n--- Step 3: Checking Kubernetes job status ---")
-    job_name = f"eval-{eval_request_id}"
+def submit_evaluation():
+    """Submit evaluation request."""
+    print("🚀 Submitting evaluation request...")
+    
+    payload = {
+        "uuid": str(uuid.uuid4()),
+        "eval_model_info": {
+            "model_name": "qwen3-4b",
+            "endpoint": "http://20.66.97.208/v1/chat/completions",
+            "api_key": "sk-test-key"
+        },
+        "eval_datasets": [
+            {
+                "dataset_id": "demo_gsm8k",
+                "version": "1.0",
+                "metadata": {}
+            }
+        ],
+        "engine": "opencompass",
+        "kubeconfig": "",
+        "source": "test",
+        "source_topic": "eval-responses"
+    }
 
-    # Check if job exists
+    
     try:
-        result = subprocess.run(
-            ["kubectl", "get", "job", job_name, "-n", "budeval", "-o", "json"], capture_output=True, text=True
+        response = requests.post(
+            "http://localhost:8099/evals/start",
+            json=payload,
+            headers={"Content-Type": "application/json"}
         )
-
-        if result.returncode == 0:
-            job_info = json.loads(result.stdout)
-            print(f"Job found: {job_name}")
-            print(f"Job status: {json.dumps(job_info.get('status', {}), indent=2)}")
-
-            # Check job spec for command details
-            spec = job_info.get("spec", {}).get("template", {}).get("spec", {})
-            containers = spec.get("containers", [])
-            if containers:
-                container = containers[0]
-                print(f"\nContainer Image: {container.get('image')}")
-                print(f"Command: {container.get('command')}")
-                args = container.get("args", [])
-                if args and len(args) > 0:
-                    print("Script Preview (first 500 chars):")
-                    print(args[0][:500])
+        
+        if response.status_code == 202:
+            result = response.json()
+            print(f"✅ Evaluation started: {result}")
+            return result.get("param", {}).get("workflow_id")
         else:
-            print(f"Job not found: {job_name}")
-            print(f"stderr: {result.stderr}")
-
+            print(f"❌ Failed to start evaluation: {response.status_code} - {response.text}")
+            return None
     except Exception as e:
-        print(f"ERROR: Failed to check job status - {e}")
+        print(f"❌ Error submitting evaluation: {e}")
+        return None
 
-    # Step 4: Check pod logs
-    print("\n--- Step 4: Checking pod logs ---")
-    try:
-        # Get pods for this job
-        result = subprocess.run(
-            ["kubectl", "get", "pods", "-n", "budeval", "-l", f"job-name={job_name}", "-o", "json"],
-            capture_output=True,
-            text=True,
-        )
 
-        if result.returncode == 0:
-            pods_info = json.loads(result.stdout)
-            pods = pods_info.get("items", [])
-
-            if pods:
-                pod_name = pods[0]["metadata"]["name"]
-                print(f"Found pod: {pod_name}")
-                print(f"Pod status: {pods[0]['status']['phase']}")
-
-                # Get pod logs
-                log_result = subprocess.run(
-                    ["kubectl", "logs", pod_name, "-n", "budeval", "--tail=100"], capture_output=True, text=True
-                )
-
-                if log_result.returncode == 0:
-                    print("\nPod logs (last 100 lines):")
-                    print(log_result.stdout)
-                else:
-                    print(f"Failed to get logs: {log_result.stderr}")
+def monitor_evaluation(workflow_id):
+    """Monitor evaluation progress."""
+    print(f"📊 Monitoring evaluation {workflow_id}...")
+    
+    max_attempts = 120  # 10 minutes
+    for attempt in range(max_attempts):
+        try:
+            response = requests.get(f"http://localhost:8099/evals/status/{workflow_id}")
+            
+            if response.status_code == 200:
+                status = response.json()
+                print(f"📈 Attempt {attempt + 1}: {status.get('status', 'unknown')}")
+                
+                # Check if completed
+                if status.get("status") in ["completed", "succeeded", "failed"]:
+                    print(f"🏁 Evaluation completed with status: {status.get('status')}")
+                    return status
+                    
+                # Check specific workflow details
+                details = status.get("details", {})
+                if details.get("status") in ["completed", "succeeded", "failed"]:
+                    print(f"🏁 Workflow completed with status: {details.get('status')}")
+                    return status
             else:
-                print("No pods found for the job")
+                print(f"⚠️  Status check failed: {response.status_code}")
+            
+            time.sleep(5)  # Wait 5 seconds between checks
+            
+        except Exception as e:
+            print(f"⚠️  Error checking status: {e}")
+            time.sleep(5)
+    
+    print("⏰ Monitoring timed out")
+    return None
 
-    except Exception as e:
-        print(f"ERROR: Failed to check pod logs - {e}")
 
-    # Step 5: Check ConfigMap
-    print("\n--- Step 5: Checking ConfigMap ---")
-    configmap_name = f"opencompass-config-{eval_request_id.lower()}"
+async def verify_clickhouse_data():
+    """Verify data was saved to ClickHouse."""
+    print("🔍 Verifying ClickHouse data...")
+    
     try:
-        result = subprocess.run(
-            ["kubectl", "get", "configmap", configmap_name, "-n", "budeval", "-o", "json"],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode == 0:
-            cm_info = json.loads(result.stdout)
-            print(f"ConfigMap found: {configmap_name}")
-            data = cm_info.get("data", {})
-            print(f"ConfigMap keys: {list(data.keys())}")
-
-            # Show model config if present
-            if "bud-model.py" in data:
-                print("\nbud-model.py content:")
-                print(data["bud-model.py"])
-        else:
-            print(f"ConfigMap not found: {configmap_name}")
-
+        storage = get_storage_adapter("clickhouse")
+        await initialize_storage(storage)
+        
+        # Get connection and check data
+        async with storage.get_connection() as conn:
+            async with conn.cursor() as cursor:
+                # Check evaluation jobs
+                await cursor.execute("SELECT COUNT(*) FROM budeval.evaluation_jobs")
+                job_count = await cursor.fetchone()
+                print(f"📊 Evaluation jobs: {job_count[0]}")
+                
+                # Check dataset results
+                await cursor.execute("SELECT COUNT(*) FROM budeval.dataset_results")
+                dataset_count = await cursor.fetchone()
+                print(f"📊 Dataset results: {dataset_count[0]}")
+                
+                # Check predictions
+                await cursor.execute("SELECT COUNT(*) FROM budeval.predictions")
+                pred_count = await cursor.fetchone()
+                print(f"📊 Predictions: {pred_count[0]}")
+                
+                if job_count[0] > 0:
+                    # Get job details
+                    await cursor.execute("""
+                        SELECT job_id, model_name, overall_accuracy, total_examples, total_correct
+                        FROM budeval.evaluation_jobs 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    """)
+                    job_info = await cursor.fetchone()
+                    if job_info:
+                        print(f"📈 Latest job: {job_info[0]} - {job_info[1]} - {job_info[2]:.2%} accuracy ({job_info[4]}/{job_info[3]})")
+                
+                success = job_count[0] > 0 and dataset_count[0] > 0 and pred_count[0] > 0
+                print(f"{'✅' if success else '❌'} ClickHouse verification: {'PASSED' if success else 'FAILED'}")
+                
+        await storage.close()
+        return success
+        
     except Exception as e:
-        print(f"ERROR: Failed to check ConfigMap - {e}")
+        print(f"❌ ClickHouse verification failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-    # Step 6: Check API status endpoint
-    print("\n--- Step 6: Checking API status endpoint ---")
-    try:
-        response = requests.get(f"{base_url}/evals/status/{job_name}")
-        print(f"Status Response: {response.status_code}")
-        if response.status_code == 200:
-            print(f"Status Body: {json.dumps(response.json(), indent=2)}")
-    except Exception as e:
-        print(f"ERROR: Failed to check status - {e}")
 
-    # Cleanup debug pod if exists
-    subprocess.run(
-        ["kubectl", "delete", "pod", "-n", "budeval", "dataset-debug-pod"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    return True
+async def main():
+    """Run end-to-end test."""
+    print("🧪 Starting end-to-end evaluation test with ClickHouse integration")
+    print("=" * 80)
+    
+    # 1. Check API availability
+    if not test_api_endpoint():
+        print("❌ Test failed: API not available")
+        return False
+    
+    # 2. Submit evaluation
+    workflow_id = submit_evaluation()
+    if not workflow_id:
+        print("❌ Test failed: Could not submit evaluation")
+        return False
+    
+    # 3. Monitor progress
+    final_status = monitor_evaluation(workflow_id)
+    if not final_status:
+        print("❌ Test failed: Monitoring timed out")
+        return False
+    
+    # 4. Wait a bit for results processing
+    print("⏳ Waiting for results processing...")
+    await asyncio.sleep(30)
+    
+    # 5. Verify ClickHouse data
+    clickhouse_ok = await verify_clickhouse_data()
+    
+    # Final result
+    success = clickhouse_ok and final_status.get("status") in ["completed", "succeeded"]
+    print("=" * 80)
+    print(f"🏆 End-to-end test: {'✅ PASSED' if success else '❌ FAILED'}")
+    
+    if success:
+        print("🎉 Complete automated workflow with ClickHouse integration working!")
+    else:
+        print("💔 Test failed - check logs for details")
+    
+    return success
 
 
 if __name__ == "__main__":
-    test_evaluation_api()
+    success = asyncio.run(main())
+    sys.exit(0 if success else 1)

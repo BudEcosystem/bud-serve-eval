@@ -18,6 +18,7 @@ from .result_schemas import (
     ResultsProcessingError,
 )
 from .storage.base import StorageAdapter
+from .storage.factory import get_storage_adapter, initialize_storage
 
 
 logger = logging.getLogger(__name__)
@@ -26,18 +27,18 @@ logger = logging.getLogger(__name__)
 class ResultsProcessor:
     """Process evaluation results from PVC and store using storage adapter."""
 
-    def __init__(self, storage_adapter: StorageAdapter, extraction_base_path: str = "/tmp/eval_extractions"):
+    def __init__(self, storage_adapter: Optional[StorageAdapter] = None, extraction_base_path: str = "/tmp/eval_extractions"):
         """Initialize results processor.
         
         Args:
-            storage_adapter: Storage adapter to use for saving results
+            storage_adapter: Storage adapter to use for saving results. If None, uses factory.
             extraction_base_path: Base path for extracting files locally
         """
-        self.storage = storage_adapter
+        self.storage = storage_adapter or get_storage_adapter()
         self.extraction_base_path = Path(extraction_base_path)
         self.extraction_base_path.mkdir(parents=True, exist_ok=True)
         self.orchestrator = AnsibleOrchestrator()
-        logger.info(f"Initialized results processor with extraction path: {self.extraction_base_path}")
+        logger.info(f"Initialized results processor with {self.storage.__class__.__name__} storage and extraction path: {self.extraction_base_path}")
 
     def extract_from_pvc(
         self,
@@ -88,9 +89,14 @@ class ResultsProcessor:
                 extravars=ansible_vars
             )
             
-            # Check if playbook succeeded
-            if not result or result.get("failed", False):
-                raise Exception(f"Ansible playbook failed: {result}")
+            # Check if playbook succeeded - ansible_runner result has .rc attribute
+            if not result or result.rc != 0:
+                error_msg = f"Ansible playbook failed with return code: {result.rc}"
+                if hasattr(result, 'stdout') and result.stdout:
+                    error_msg += f", stdout: {result.stdout.read()}"
+                if hasattr(result, 'stderr') and result.stderr:
+                    error_msg += f", stderr: {result.stderr.read()}"
+                raise Exception(error_msg)
 
             extracted_path = f"{local_extract_path}/{job_id}/outputs"
 

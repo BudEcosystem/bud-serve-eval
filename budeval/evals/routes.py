@@ -242,9 +242,11 @@ async def get_evaluation_results(job_id: str):
         dict: Complete evaluation results
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
         if not results:
@@ -269,9 +271,11 @@ async def get_evaluation_summary(job_id: str):
         dict: Evaluation summary
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
         if not results:
@@ -299,9 +303,11 @@ async def get_dataset_results(job_id: str, dataset_name: str):
         dict: Dataset-specific results
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
         if not results:
@@ -332,9 +338,11 @@ async def get_evaluation_metrics(job_id: str):
         dict: Aggregated evaluation metrics
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
         results = await storage.get_results(job_id)
 
         if not results:
@@ -367,23 +375,32 @@ async def list_evaluation_results():
         dict: List of job IDs with available results
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
         job_ids = await storage.list_results()
 
         # Get metadata for each job
         results_list = []
         for job_id in job_ids:
-            metadata = await storage.get_metadata(job_id)
-            if metadata:
+            # Try to get metadata if supported by storage adapter
+            if hasattr(storage, 'get_metadata'):
+                metadata = await storage.get_metadata(job_id)
+                if metadata:
+                    results_list.append({
+                        "job_id": job_id,
+                        "stored_at": metadata.get("stored_at"),
+                        "storage_type": metadata.get("storage_type")
+                    })
+            else:
+                # For storage adapters without metadata, use basic info
                 results_list.append({
                     "job_id": job_id,
-                    "stored_at": metadata.get("stored_at"),
-                    "storage_type": metadata.get("storage_type")
+                    "stored_at": None,
+                    "storage_type": storage.__class__.__name__
                 })
-            else:
-                results_list.append({"job_id": job_id})
 
         return {
             "status": "success",
@@ -408,9 +425,11 @@ async def delete_evaluation_results(job_id: str):
         dict: Deletion result
     """
     try:
-        from budeval.evals.storage.filesystem import FilesystemStorage
+        from budeval.evals.storage.factory import get_storage_adapter, initialize_storage
 
-        storage = FilesystemStorage()
+        storage = get_storage_adapter()
+        if hasattr(storage, 'initialize'):
+            await initialize_storage(storage)
 
         # Check if results exist
         if not await storage.exists(job_id):
