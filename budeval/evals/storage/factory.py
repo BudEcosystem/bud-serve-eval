@@ -1,6 +1,14 @@
-"""Storage factory for creating storage adapters based on configuration."""
+"""Storage factory for creating storage adapters based on configuration.
+
+This module intentionally returns a distinct ClickHouse storage instance per
+thread to avoid cross-event-loop usage of a single connection pool. Reusing a
+single async connection pool across different threads/event loops can lead to
+errors like "Future attached to a different loop" when awaited from a loop
+different from the one that created the pool.
+"""
 
 from typing import TYPE_CHECKING, Optional
+import threading
 
 from budeval.commons.config import secrets_settings
 from budeval.commons.logging import logging
@@ -15,7 +23,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_clickhouse_storage: Optional["ClickHouseStorage"] = None
+# Maintain per-thread ClickHouse storage instances to keep each connection pool
+# bound to the event loop that initializes and uses it within that thread.
+_clickhouse_storage_by_thread: dict[int, "ClickHouseStorage"] = {}
 
 
 def get_storage_adapter(backend: Optional[str] = None) -> StorageAdapter:
@@ -32,7 +42,7 @@ def get_storage_adapter(backend: Optional[str] = None) -> StorageAdapter:
         ValueError: If the backend type is not supported
         ImportError: If ClickHouse dependencies are not available
     """
-    global _clickhouse_storage
+    global _clickhouse_storage_by_thread
 
     # Use provided backend or fall back to configuration
     storage_backend = backend or secrets_settings.storage_backend
@@ -43,13 +53,14 @@ def get_storage_adapter(backend: Optional[str] = None) -> StorageAdapter:
         return FilesystemStorage()
 
     elif storage_backend == "clickhouse":
-        # Lazy import and singleton pattern for ClickHouse
-        if _clickhouse_storage is None:
+        # Per-thread instance to avoid cross-event-loop future issues
+        thread_id = threading.get_ident()
+        if thread_id not in _clickhouse_storage_by_thread:
             try:
                 from .clickhouse import ClickHouseStorage
 
-                _clickhouse_storage = ClickHouseStorage()
-                logger.info("ClickHouse storage adapter created")
+                _clickhouse_storage_by_thread[thread_id] = ClickHouseStorage()
+                logger.info("ClickHouse storage adapter created for thread %s", thread_id)
             except ImportError as e:
                 logger.error(f"ClickHouse dependencies not available: {e}")
                 raise ImportError(
@@ -57,7 +68,7 @@ def get_storage_adapter(backend: Optional[str] = None) -> StorageAdapter:
                     "Install with: pip install asynch clickhouse-connect"
                 ) from e
 
-        return _clickhouse_storage
+        return _clickhouse_storage_by_thread[thread_id]
 
     else:
         supported_backends = ["filesystem", "clickhouse"]

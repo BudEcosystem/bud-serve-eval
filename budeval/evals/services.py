@@ -82,7 +82,7 @@ class EvaluationOpsService:
                 engine_args=engine_args,
                 docker_image=engine_metadata.docker_image_url,
                 namespace="budeval",
-                ttl_seconds=3600,  # 1 hour TTL
+                ttl_seconds=7200,  # 2 hour TTL to allow extraction time
                 output_volume_size="10Gi",  # Testing
             )
 

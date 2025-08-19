@@ -310,18 +310,19 @@ class EvaluationWorkflow:
             storage = get_storage_adapter()
             processor = ResultsProcessor(storage)
 
-            # Initialize storage if needed (e.g., ClickHouse connection pool)
-            if hasattr(storage, "initialize"):
-                asyncio.run(initialize_storage(storage))
-
-            # Extract and process results
-            import asyncio
-
-            results = asyncio.run(
-                processor.extract_and_process(
+            # Initialize storage and extract results in the same event loop
+            async def extract_with_storage():
+                # Initialize storage if needed (e.g., ClickHouse connection pool)
+                if hasattr(storage, "initialize"):
+                    await initialize_storage(storage)
+                
+                # Extract and process results
+                return await processor.extract_and_process(
                     job_id=job_id, model_name=model_name, namespace=namespace, kubeconfig=kubeconfig
                 )
-            )
+            
+            # Run both operations in the same event loop
+            results = asyncio.run(extract_with_storage())
 
             logger.info(f"Successfully processed results for job {job_id}")
             response = SuccessResponse(

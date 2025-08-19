@@ -148,6 +148,28 @@ class OpenCompassTransformer(BaseTransformer):
         datasets_str = " ".join(dataset_names)
         logger.debug(f"Generated datasets string: {datasets_str}")
 
+#         models = [
+#     dict(
+#         type=OpenAISDK,
+#         abbr=os.environ.get('MODEL_NAME', 'qwen3-4b'),
+#         path=os.environ.get('MODEL_NAME', 'qwen3-4b'),  # Actual model name for API
+#         key=os.environ.get('OPENAI_API_KEY'),
+#         openai_api_base=os.environ.get('OPENAI_API_BASE'),
+#         query_per_second={int(request.model.extra_params.get("query_per_second", "1"))},
+#         max_out_len={int(request.model.extra_params.get("max_out_len", str(request.model.max_tokens or 2048)))},
+#         max_seq_len={int(request.model.extra_params.get("max_seq_len", "4096"))},
+#         batch_size={request.batch_size}
+#     ),
+# ]
+
+
+# # Run OpenCompass evaluation with model config and datasets via CLI
+# python /workspace/run.py \\
+#     --models bud_model \\
+#     --datasets {datasets_str} \\
+#     --work-dir /workspace/outputs \\
+#     --max-num-workers {request.num_workers}{debug_flag}
+
         script = f"""
 # Create a model config file that uses environment variables
 mkdir -p /workspace/opencompass/configs/models
@@ -162,11 +184,11 @@ models = [
         path=os.environ.get('MODEL_NAME', 'qwen3-4b'),  # Actual model name for API
         key=os.environ.get('OPENAI_API_KEY'),
         openai_api_base=os.environ.get('OPENAI_API_BASE'),
-        query_per_second={int(request.model.extra_params.get("query_per_second", "1"))},
+        query_per_second={int(request.model.extra_params.get("query_per_second", "10"))},
         max_out_len={int(request.model.extra_params.get("max_out_len", str(request.model.max_tokens or 2048)))},
         max_seq_len={int(request.model.extra_params.get("max_seq_len", "4096"))},
         batch_size={request.batch_size}
-    ),
+    )
 ]
 EOF
 
@@ -176,9 +198,9 @@ cd /workspace
 # Run OpenCompass evaluation with model config and datasets via CLI
 python /workspace/run.py \\
     --models bud_model \\
-    --datasets {datasets_str} \\
+    --datasets demo_gsm8k_chat_gen \\
     --work-dir /workspace/outputs \\
-    --max-num-workers {request.num_workers}{debug_flag}
+    --max-num-workers {request.num_workers} --debug
 """
 
         args = [script.strip()]
@@ -247,7 +269,7 @@ python /workspace/run.py \\
             logger.debug(f"Added additional environment variables: {list(additional_vars.keys())}")
 
         logger.info(f"Generated {len(env_vars)} environment variables for OpenCompass")
-        logger.debug(f"Environment variables (without sensitive values): {[k for k in env_vars.keys()]}")
+        logger.debug(f"Environment variables (without sensitive values): {[k for k in env_vars]}")
 
         return env_vars
 
@@ -255,7 +277,7 @@ python /workspace/run.py \\
         """Validate that the request is compatible with OpenCompass."""
         logger.info(f"Validating request for model: {request.model.name}, type: {request.model.type}")
         logger.info(f"Request includes {len(request.datasets)} dataset(s): {[d.name for d in request.datasets]}")
-        
+
         # Check if model type is supported
         if request.model.type not in [ModelType.API]:
             logger.error(f"Unsupported model type: {request.model.type}")
@@ -269,7 +291,7 @@ python /workspace/run.py \\
             if not request.model.base_url:
                 logger.error("Missing base URL for API model")
                 raise ValueError("Base URL is required for API models")
-            
+
             logger.debug("API model validation passed - has api_key and base_url")
 
         # Check if datasets are supported
@@ -283,10 +305,10 @@ python /workspace/run.py \\
 
         if supported:
             logger.info(f"Found mappings for datasets: {supported}")
-        
+
         if unsupported:
             logger.warning(f"The following datasets may not be supported by OpenCompass: {unsupported}")
-            
+
         logger.info("Request validation completed successfully")
 
     def get_supported_datasets(self) -> List[str]:

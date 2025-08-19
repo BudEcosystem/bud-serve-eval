@@ -8,10 +8,28 @@
 
   vars:
     extractor_image: "busybox:1.35"
-    wait_timeout: 300
-    kubectl_retries: 3
+    wait_timeout: 180
+    kubectl_retries: 5
 
   tasks:
+    - name: Extract UUID from job_id if it has engine prefix
+      set_fact:
+        uuid_part: "{{ job_id.split('-', 1)[1] if '-' in job_id and (job_id.startswith('opencompass-') or job_id.startswith('vllm-') or job_id.startswith('lighteval-')) else job_id }}"
+    
+    - name: Verify PVC exists before extraction
+      community.kubernetes.k8s_info:
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ uuid_part }}-output-pvc"
+        namespace: "{{ namespace }}"
+        kubeconfig: "{{ kubeconfig_path | default(omit) }}"
+      register: pvc_info
+      failed_when: pvc_info.resources | length == 0
+      
+    - name: Display PVC status
+      debug:
+        msg: "PVC {{ uuid_part }}-output-pvc found with status: {{ pvc_info.resources[0].status.phase }}"
+
     - name: Ensure local extraction directory exists
       file:
         path: "{{ local_extract_path }}"
@@ -51,7 +69,7 @@
             volumes:
             - name: output
               persistentVolumeClaim:
-                claimName: "{{ job_id }}-output-pvc"
+                claimName: "{{ uuid_part }}-output-pvc"
 
     - name: Wait for extraction pod to be ready
       community.kubernetes.k8s_info:
